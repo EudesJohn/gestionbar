@@ -1,5 +1,5 @@
-import { ArrowDownLeft, ArrowRight, ArrowUpRight, Banknote, CalendarDays, Check, ChevronDown, CircleAlert, Clock3, ClipboardList, Download, Package, Plus, Smartphone, TrendingUp, Users, Wallet } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowRight, ArrowUpRight, Banknote, CalendarDays, Check, ChevronDown, CircleAlert, Clock3, ClipboardList, Download, Package, Plus, Smartphone, TrendingUp, Users, Wallet } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useStore } from '../store';
 import { activeSheets, receivedValue, salesValue, summary } from '../lib/domain';
 import { dateLabel, fcfa, money, shiftDate, shortName, today } from '../lib/format';
@@ -7,17 +7,19 @@ import { Avatar, Badge, Button, SectionTitle, Stat } from './ui';
 import type { Page } from '../types';
 import type { ModalState } from './Forms';
 import { exportReport } from '../lib/exports';
+import { analyze, analyticsRange, periodLabels } from '../lib/analytics';
+import type { AnalyticsPeriod, Grouping } from '../lib/analytics';
+import { AnalyticsPanels, PaymentDonut, SalesTrend } from './charts/AnalyticsPanels';
 
 interface Props { date: string; setDate: (date: string) => void; navigate: (page: Page) => void; open: (modal: ModalState) => void; notify: (text: string) => void }
 export function Dashboard({ date, setDate, navigate, open, notify }: Props) {
-  const { data, demo, profile } = useStore(); const [range, setRange] = useState(7); const [hover, setHover] = useState<number | null>(null); const [exporting, setExporting] = useState(false);
+  const { data, demo, profile } = useStore(); const [period, setPeriod] = useState<AnalyticsPeriod>('week'); const [grouping, setGrouping] = useState<Grouping>('day'); const [exporting, setExporting] = useState(false);
+  const { from, to } = analyticsRange(date, period);
   const sheets = activeSheets(data, date); const totals = summary(sheets);
   const previous = summary(activeSheets(data, shiftDate(date, -7)));
   const growth = (current: number, before: number) => before ? `${current >= before ? '+' : ''}${Math.round((current - before) / before * 100)} %` : undefined;
-  const chartDays = Array.from({ length: range }, (_, i) => { const d = shiftDate(date, i - range + 1); return { date: d, ...summary(activeSheets(data, d)), previous: summary(activeSheets(data, shiftDate(d, -7))).sales }; });
+  const chartDays = useMemo(() => analyze(data, shiftDate(date, -6), date).daily.map(d => ({ ...d, previous: d.previousSales })), [data, date]);
   const max = Math.max(100000, ...chartDays.map(d => Math.max(d.sales, d.previous))) * 1.2;
-  const points = (key: 'sales' | 'previous') => chartDays.map((d, i) => `${56 + i * (630 / (range - 1))},${202 - d[key] / max * 168}`).join(' ');
-  const totalReceived = totals.cash + totals.momo; const cashPercent = totalReceived ? Math.round(totals.cash / totalReceived * 100) : 0;
   const lowStock = data.products.filter(p => p.stock <= p.threshold);
   const activeEmployees = data.employees.filter(e => e.status === 'active');
   const ranking = [...sheets].sort((a, b) => salesValue(b) - salesValue(a));
@@ -33,20 +35,13 @@ export function Dashboard({ date, setDate, navigate, open, notify }: Props) {
       <Stat label="Mobile Money" value={money(totals.momo)} icon={Smartphone} color="purple" change={growth(totals.momo, previous.momo)} note="vs le même jour à J−7" spark={chartDays.map(d => d.momo / max * 28)} />
       <Stat label="Manquants du jour" value={money(totals.shortage)} icon={Wallet} color="orange" note={`${sheets.filter(s => s.shortage > 0).length} serveuses concernées`} change={`${rate} % des remises`} />
     </div>
-    <div className="dashboard-middle">
-      <section className="panel sales-chart"><SectionTitle title="Évolution des ventes" description="Une vue sur l’activité de votre bar." action={<div className="segmented"><button className={range === 7 ? 'active' : ''} onClick={() => setRange(7)}>7 jours</button><button className={range === 14 ? 'active' : ''} onClick={() => setRange(14)}>14 jours</button></div>} />
-        <div className="chart-summary"><strong>{fcfa(chartDays.reduce((s, d) => s + d.sales, 0))}</strong><div className="chart-legend"><span><i />Cette période</span><span><i />Semaine précédente</span></div></div>
-        <div className="chart-wrap"><svg viewBox="0 0 710 246" role="img" aria-label={`Ventes des ${range} derniers jours comparées à la semaine précédente`} onMouseLeave={() => setHover(null)}>
-          <defs><linearGradient id="chart-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#2f7960" stopOpacity=".14" /><stop offset="100%" stopColor="#2f7960" stopOpacity="0" /></linearGradient></defs>
-          {[0, 1, 2, 3, 4].map(i => <g key={i}><line x1="52" x2="693" y1={34 + i * 42} y2={34 + i * 42} stroke="#edf0ef" strokeDasharray="3 4" /><text x="0" y={38 + i * 42} fill="#8d9696" fontSize="10">{Math.round(max * (4 - i) / 4 / 1000)} k</text></g>)}
-          <polygon points={`56,202 ${points('sales')} 686,202`} fill="url(#chart-area)" />
-          <polyline points={points('previous')} fill="none" stroke="#c0d5c9" strokeWidth="2" strokeDasharray="5 5" strokeLinejoin="round" />
-          <polyline points={points('sales')} fill="none" stroke="#277558" strokeWidth="2.7" strokeLinejoin="round" strokeLinecap="round" />
-          {chartDays.map((day, i) => { const x = 56 + i * 630 / (range - 1); return <g key={day.date} onMouseEnter={() => setHover(i)}><rect x={x - 20} y="25" width="40" height="186" fill="transparent" /><text x={x} y="234" fill={i === range - 1 ? '#27674f' : '#899190'} fontSize="10" textAnchor="middle">{dateLabel(day.date, range === 7 ? { weekday: 'short' } : { day: 'numeric' })}</text>{(hover === i || i === range - 1) && <circle cx={x} cy={202 - day.sales / max * 168} r="4.5" fill="#277558" stroke="white" strokeWidth="2.5" />}</g>; })}
-        </svg>{hover !== null && <div className="chart-tooltip">{dateLabel(chartDays[hover].date, { weekday: 'long', day: 'numeric' })}<strong>{fcfa(chartDays[hover].sales)}</strong></div>}</div>
-        <div className="chart-footer"><span><span className="tiny-dot" />Les montants sont exprimés en FCFA</span><button className="text-button" onClick={() => navigate('reports')}>Voir les rapports <ArrowRight size={14} /></button></div>
-      </section>
-      <section className="panel payments-panel"><SectionTitle title="Répartition des encaissements" description="Chaque franc à sa place." /><div className="payment-total"><span>Total encaissé</span><strong>{money(totalReceived)} <small>FCFA</small></strong></div><div className="payment-stacked" aria-label={`${cashPercent} % en cash, ${100 - cashPercent} % en Mobile Money`}><div style={{ width: `${cashPercent}%` }} /><div style={{ width: `${100 - cashPercent}%` }} /></div><div className="payment-key"><span><i />Cash</span><span><i />Mobile Money</span></div><div className="payment-row"><span className="payment-icon"><Banknote size={19} /></span><div>Espèces <small>{cashPercent} % des encaissements</small></div><strong>{money(totals.cash)} <small>F</small></strong></div><div className="payment-row"><span className="payment-icon momo"><Smartphone size={19} /></span><div>Mobile Money <small>{totalReceived ? 100 - cashPercent : 0} % des encaissements</small></div><strong>{money(totals.momo)} <small>F</small></strong></div><div className="payment-other"><span><ArrowDownLeft size={15} />Dépenses du jour</span><strong>{fcfa(totals.expense)}</strong></div><button className="text-button full-link" onClick={() => navigate('daily')}>Consulter la fiche du jour <ArrowRight size={15} /></button></section>
+    <div className="analytics-toolbar">
+      <div><h2>Votre activité en graphiques</h2><p>{dateLabel(from)}{from !== to ? ` — ${dateLabel(to)}` : ''}</p></div>
+      <div className="segmented" role="group" aria-label="Période des graphiques">{Object.entries(periodLabels).map(([value, label]) => <button type="button" aria-pressed={period === value} className={period === value ? 'active' : ''} key={value} onClick={() => setPeriod(value as AnalyticsPeriod)}>{label}</button>)}</div>
+    </div>
+    <div className="analytics-lead">
+      <SalesTrend data={data} from={from} to={to} grouping={grouping} onGrouping={setGrouping} />
+      <PaymentDonut data={data} from={from} to={to} />
     </div>
     <div className="dashboard-bottom">
       <section className="panel team-performance"><SectionTitle title="L’équipe aujourd’hui" description={`${sheets.length} serveuses en service · ${activeEmployees.length - sheets.length > 0 ? activeEmployees.length - sheets.length : 0} sans fiche aujourd’hui`} action={<button className="text-button" onClick={() => navigate('team')}>Voir l’équipe <ArrowRight size={14} /></button>} />
@@ -58,6 +53,10 @@ export function Dashboard({ date, setDate, navigate, open, notify }: Props) {
         <button className="attention-item" onClick={() => open({ type: 'closure' })}><span className="attention-icon tint-blue">{data.closures.some(c => c.date === date) ? <Check size={18} /> : <Clock3 size={18} />}</span><div><strong>{data.closures.some(c => c.date === date) ? 'Journée clôturée' : 'Clôture de la journée'}</strong><p>{data.closures.some(c => c.date === date) ? 'Toutes les fiches sont verrouillées.' : `À effectuer avant ${data.settings.closingTime.replace(':', ' h ')}.`}</p><span>{data.closures.some(c => c.date === date) ? 'Consulter' : 'Préparer la clôture'} <ArrowUpRight size={12} /></span></div></button>
         <div className="quiet-note"><span className="shield-check"><Check size={12} /></span>Chaque mouvement garde une trace.</div>
       </section>
+    </div>
+    <div className="analytics-section">
+      <div className="analytics-toolbar"><div><h2>Comprendre les chiffres</h2><p>{dateLabel(from)}{from !== to ? ` — ${dateLabel(to)}` : ''} · fiches validées</p></div><button className="text-button" onClick={() => navigate('reports')}>Tous les graphiques <ArrowRight size={15} /></button></div>
+      <AnalyticsPanels data={data} from={from} to={to} grouping={grouping} />
     </div>
     <div className="dashboard-footnote"><span><ClipboardList size={13} />{demo ? 'Données fictives · vos modifications sont conservées sur cet appareil' : 'Comptoir · votre activité, en toute clarté'}</span><span>{data.settings.location} <span className="tiny-dot" /> Heure du Bénin (UTC+1)</span></div>
   </>;

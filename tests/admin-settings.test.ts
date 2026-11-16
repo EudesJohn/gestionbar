@@ -5,6 +5,7 @@ import handler from '../api/admin-settings';
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: vi.fn() }));
 const getUser = vi.fn(); const signIn = vi.fn(); const signOut = vi.fn(); const rpc = vi.fn(); const single = vi.fn(); const requestAuth = vi.fn();
+const updateProfile = vi.fn(); const updateEq = vi.fn(); const updateSelect = vi.fn(); const updateSingle = vi.fn();
 const payload = { action: 'password', currentPassword: 'old-password-for-test', password: 'new-long-password-for-test' };
 async function request(body: unknown = payload, origin = 'https://gestionbar-amber.vercel.app') {
   let output = ''; let status = 200;
@@ -20,8 +21,11 @@ beforeEach(() => {
   rpc.mockResolvedValue({ data: true, error: null });
   signIn.mockResolvedValue({ data: { user: { id: 'admin-id' } }, error: null }); signOut.mockResolvedValue({ error: null });
   requestAuth.mockResolvedValue({ ok: true, status: 200 }); vi.stubGlobal('fetch', requestAuth);
+  updateSingle.mockResolvedValue({ data: { id: 'admin-id', name: 'Eudes Johnson' }, error: null });
+  const updateQuery = { eq: updateEq, select: updateSelect, single: updateSingle };
+  updateEq.mockReturnValue(updateQuery); updateSelect.mockReturnValue(updateQuery); updateProfile.mockReturnValue(updateQuery);
   vi.mocked(createClient).mockImplementation((_url, key) => (key === 'private-key'
-    ? { from: () => ({ select: () => ({ eq: () => ({ single }) }) }) }
+    ? { from: () => ({ select: () => ({ eq: () => ({ single }) }), update: updateProfile }) }
     : { auth: { getUser, signInWithPassword: signIn, signOut }, rpc }) as unknown as ReturnType<typeof createClient>);
 });
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
@@ -57,5 +61,32 @@ describe('administrator personal credentials', () => {
     const result = await request({ action: 'email', currentPassword: payload.currentPassword, email: 'New@example.test' });
     expect(result.body.confirmationRequired).toBe(true);
     expect(requestAuth).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ body: JSON.stringify({ email: 'new@example.test' }) }));
+  });
+  it('updates only the authenticated administrator display name in the profile source of truth', async () => {
+    const result = await request({ action: 'name', name: '  Eudes   Johnson  ' });
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ id: 'admin-id', name: 'Eudes Johnson' });
+    expect(rpc).toHaveBeenCalledWith('touch_secure_session');
+    expect(updateProfile).toHaveBeenCalledWith({ name: 'Eudes Johnson' });
+    expect(updateEq.mock.calls).toEqual([['id', 'admin-id'], ['role', 'admin']]);
+    expect(signIn).not.toHaveBeenCalled(); expect(signOut).not.toHaveBeenCalled(); expect(requestAuth).not.toHaveBeenCalled();
+  });
+  it('denies display-name changes from managers, expired sessions and requests targeting another account', async () => {
+    single.mockResolvedValue({ data: { role: 'manager' }, error: null });
+    expect((await request({ action: 'name', name: 'Nouveau nom' })).status).toBe(403);
+    single.mockResolvedValue({ data: { role: 'admin' }, error: null });
+    expect((await request({ action: 'name', name: 'Nouveau nom', userId: 'another-user' })).status).toBe(422);
+    expect((await request({ action: 'name', name: 'Nouveau nom', role: 'admin' })).status).toBe(422);
+    rpc.mockResolvedValue({ data: null, error: { message: 'SESSION_EXPIRED' } });
+    expect((await request({ action: 'name', name: 'Nouveau nom' })).status).toBe(403);
+    expect(updateProfile).not.toHaveBeenCalled();
+  });
+  it('validates the display name and reports a rejected write without claiming success', async () => {
+    for (const name of ['', ' ', 'A', 'x'.repeat(151), 'Nom\nDeux lignes', 123, null]) {
+      expect((await request({ action: 'name', name })).status).toBe(422);
+    }
+    expect(updateProfile).not.toHaveBeenCalled();
+    updateSingle.mockResolvedValue({ data: null, error: { message: 'No matching administrator' } });
+    expect((await request({ action: 'name', name: 'Nouveau nom' })).status).toBe(409);
   });
 });

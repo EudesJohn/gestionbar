@@ -36,7 +36,22 @@ export default async function handler(req: Request, res: ServerResponse) {
     } catch { return reply(400, { error: 'La demande est invalide.' }); }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return reply(400, { error: 'La demande est invalide.' });
     const body = parsed as Record<string, unknown>;
-    if (Object.keys(body).some(key => !['action', 'currentPassword', 'email', 'password'].includes(key))) return reply(422, { error: 'La demande contient des champs non autorisés.' });
+    const allowedFields = body.action === 'name' ? ['action', 'name'] : ['action', 'currentPassword', 'email', 'password'];
+    if (Object.keys(body).some(key => !allowedFields.includes(key))) return reply(422, { error: 'La demande contient des champs non autorisés.' });
+    if (body.action === 'name') {
+      if (typeof body.name !== 'string' || /[\u0000-\u001f\u007f]/u.test(body.name)) return reply(422, { error: 'Indiquez un nom de 2 à 150 caractères, sur une seule ligne.' });
+      const name = body.name.trim().replace(/\s+/gu, ' ');
+      if (Array.from(name).length < 2 || Array.from(name).length > 150) return reply(422, { error: 'Indiquez un nom de 2 à 150 caractères.' });
+      const { error: securityError } = await userClient.rpc('touch_secure_session');
+      if (securityError) return reply(403, { error: 'Une session active avec double authentification est nécessaire.' });
+      // The display name lives in profiles, the source read by get_snapshot.
+      // Keep the target fixed to the authenticated admin and recheck the role in the UPDATE.
+      // The existing database trigger records the old and new profile values.
+      const { data: updated, error: updateError } = await server.from('profiles')
+        .update({ name }).eq('id', auth.user.id).eq('role', 'admin').select('id,name').single();
+      if (updateError || !updated) return reply(409, { error: 'Le nom n’a pas pu être enregistré. Actualisez votre compte avant de réessayer.' });
+      return reply(200, { id: updated.id, name: updated.name, message: 'Votre nom a été mis à jour.' });
+    }
     if (body.action !== 'email' && body.action !== 'password') return reply(422, { error: 'Choisissez une modification valide.' });
     if (typeof body.currentPassword !== 'string' || !body.currentPassword || Buffer.byteLength(body.currentPassword) > 256) return reply(422, { error: 'Indiquez votre mot de passe actuel.' });
     if (body.action === 'email' && (typeof body.email !== 'string' || body.email.trim().length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email.trim()))) return reply(422, { error: 'Adresse e-mail invalide.' });

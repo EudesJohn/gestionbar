@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "vitest run tests/domain.test.ts tests/database.test.ts tests/accounts.test.ts tests/security.test.ts tests/admin-settings.test.ts tests/auth-update.test.tsx --exclude **/.local/**",
+    "test": "vitest run tests/domain.test.ts tests/database.test.ts tests/accounts.test.ts tests/security.test.ts tests/admin-settings.test.ts tests/auth-update.test.tsx tests/analytics.test.ts --exclude **/.local/**",
     "test:e2e": "playwright test"
   },
   "dependencies": {

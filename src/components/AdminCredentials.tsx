@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
-import { KeyRound, Mail, ShieldCheck } from 'lucide-react';
+import { KeyRound, Mail, ShieldCheck, UserRound } from 'lucide-react';
 import { useStore } from '../store';
 import { supabase } from '../lib/supabase';
 import { listQueue } from '../lib/private-storage';
 import { Badge, Button, ErrorMessage, Field, Input, SectionTitle } from './ui';
 
 export function AdminCredentials({ notify }: { notify: (message: string) => void }) {
-  const { profile, demo, online, pending, signOut } = useStore();
+  const { profile, demo, online, pending, signOut, sync } = useStore();
+  const [name, setName] = useState(profile?.name || '');
   const [currentEmail, setCurrentEmail] = useState(''); const [email, setEmail] = useState('');
   const [emailPassword, setEmailPassword] = useState(''); const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState(''); const [confirmation, setConfirmation] = useState('');
-  const [busy, setBusy] = useState<'email' | 'password' | null>(null);
+  const [busy, setBusy] = useState<'name' | 'email' | 'password' | null>(null);
   const [error, setError] = useState(''); const [message, setMessage] = useState('');
+  useEffect(() => { setName(profile?.name || ''); }, [profile?.id, profile?.name]);
   useEffect(() => {
     if (!supabase || profile?.role !== 'admin') return;
     let active = true;
@@ -24,20 +26,26 @@ export function AdminCredentials({ notify }: { notify: (message: string) => void
   }, [profile?.id, profile?.role]);
   if (profile?.role !== 'admin') return null;
 
-  const update = async (action: 'email' | 'password') => {
+  const update = async (action: 'name' | 'email' | 'password') => {
     setBusy(action); setError(''); setMessage('');
     try {
-      if (!online || demo || !supabase) throw new Error('Connectez-vous au site en ligne pour modifier vos identifiants.');
+      if (!online || demo || !supabase) throw new Error('Connectez-vous au site en ligne pour modifier votre compte.');
       if (action === 'password' && password !== confirmation) throw new Error('Les deux nouveaux mots de passe ne correspondent pas.');
       if (action === 'password' && (await listQueue(profile.id)).length) throw new Error('Synchronisez les fiches en attente avant de modifier votre mot de passe.');
       const { data: session, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session.session) throw new Error('Reconnectez-vous pour modifier vos identifiants.');
+      if (sessionError || !session.session) throw new Error('Reconnectez-vous pour modifier votre compte.');
       const response = await fetch('/api/admin-settings', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
-        body: JSON.stringify(action === 'email' ? { action, email, currentPassword: emailPassword } : { action, currentPassword, password }),
+        body: JSON.stringify(action === 'name' ? { action, name } : action === 'email' ? { action, email, currentPassword: emailPassword } : { action, currentPassword, password }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'La modification a été refusée.');
+      if (action === 'name') {
+        setName(result.name);
+        await sync();
+        setMessage(result.message);
+        return;
+      }
       setEmailPassword(''); setCurrentPassword(''); setPassword(''); setConfirmation('');
       if (result.reauthenticate) { notify('Mot de passe modifié. Reconnectez-vous avec le nouveau mot de passe.'); await signOut(); }
       else setMessage(result.message);
@@ -45,10 +53,17 @@ export function AdminCredentials({ notify }: { notify: (message: string) => void
     finally { setBusy(null); }
   };
   return <>
-    <div className="info-box"><ShieldCheck size={20} /><p>Ces réglages concernent uniquement votre compte administrateur. Votre mot de passe actuel et une session avec double authentification sont nécessaires.</p></div>
-    {demo && <div className="status-banner secondary-section"><Badge tone="orange">Démonstration</Badge>Les identifiants réels se modifient sur le site connecté.</div>}
+    <div className="info-box"><ShieldCheck size={20} /><p>Ces réglages concernent votre compte administrateur et nécessitent une session avec double authentification. Votre mot de passe actuel est demandé pour modifier l’e-mail ou le mot de passe.</p></div>
+    {demo && <div className="status-banner secondary-section"><Badge tone="orange">Démonstration</Badge>Le compte réel se modifie sur le site connecté.</div>}
     <ErrorMessage error={error} />
     {message && <div className="success-box" role="status">{message}</div>}
+    <form className="panel settings-form secondary-section" onSubmit={e => { e.preventDefault(); void update('name'); }}>
+      <SectionTitle title="Nom de l’administrateur" description="Le nom affiché dans votre espace et la liste des comptes." action={<UserRound size={19} />} />
+      <div className="settings-fields">
+        <Field label="Nom affiché"><Input type="text" value={name} onChange={e => setName(e.target.value)} minLength={2} maxLength={150} autoComplete="name" required disabled={!!busy || demo} /></Field>
+      </div>
+      <div className="form-footer"><Button type="submit" disabled={!!busy || demo || !online || name.trim().replace(/\s+/gu, ' ') === profile.name || Array.from(name.trim()).length < 2}>{busy === 'name' ? 'Enregistrement…' : 'Enregistrer mon nom'}</Button></div>
+    </form>
     <div className="settings-grid secondary-section">
       <form className="panel settings-form" onSubmit={e => { e.preventDefault(); void update('email'); }}>
         <SectionTitle title="Adresse e-mail de connexion" description={currentEmail ? `Adresse actuelle : ${currentEmail}` : 'Votre identifiant de connexion.'} action={<Mail size={19} />} />
