@@ -42,14 +42,14 @@ test('a daily sheet updates stock, creates the shortage and survives reload', as
   await expect(page.getByRole('row').filter({ hasText: 'Beaufort' })).toContainText('176 bouteilles');
   await page.getByRole('navigation').getByRole('button', { name: 'Dettes & manquants' }).click();
   const row = page.getByRole('row').filter({ hasText: 'Rose Akakpo' });
-  await expect(row).toContainText('600 FCFA');
+  await expect(row).toContainText('2 000 FCFA');
   await row.getByRole('button', { name: 'Régulariser' }).click();
   await page.getByLabel('Montant remboursé (FCFA)').fill('200');
   await page.getByRole('button', { name: 'Confirmer le remboursement' }).click();
-  await expect(row).toContainText('400 FCFA');
+  await expect(row).toContainText('1 800 FCFA');
   await page.reload();
   await page.getByRole('navigation').getByRole('button', { name: 'Dettes & manquants' }).click();
-  await expect(page.getByRole('row').filter({ hasText: 'Rose Akakpo' })).toContainText('400 FCFA');
+  await expect(page.getByRole('row').filter({ hasText: 'Rose Akakpo' })).toContainText('1 800 FCFA');
 });
 
 test('phone layout stays within viewport and supports forms', async ({ page }) => {

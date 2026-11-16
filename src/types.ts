@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'manager' | 'entry';
+export type Role = 'admin' | 'manager' | 'entry' | 'pending';
 export type Page = 'dashboard' | 'daily' | 'team' | 'products' | 'stock' | 'debts' | 'payroll' | 'reports' | 'settings';
 export type DebtKind = 'shortage' | 'credit' | 'advance' | 'other';
 export interface Profile { id: string; name: string; role: Role }
@@ -17,6 +17,7 @@ export interface Sheet {
   cash: number; momo: number; expense: number; expenseNote: string; deposit: number;
   credit: number; client: string; note: string; shortage: number;
   status: 'validated' | 'reversed'; createdAt: string; reversalReason?: string;
+  shortageBasis?: 'sold' | 'received';
 }
 export interface Debt {
   id: string; employeeId: string; date: string; kind: DebtKind;
@@ -38,6 +39,7 @@ export interface Settings {
   advanceLimit: number; deductionCap: number; closingTime: string; creditAllowed: boolean;
 }
 export interface Data {
+  calculationVersion?: number;
   employees: Employee[]; products: Product[]; sheets: Sheet[]; debts: Debt[];
   settlements: Settlement[]; movements: Movement[]; payrolls: Payroll[];
   audit: Audit[]; closures: Closure[]; settings: Settings;

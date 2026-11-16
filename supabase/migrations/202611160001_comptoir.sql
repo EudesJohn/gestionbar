@@ -4,7 +4,7 @@ begin;
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete restrict,
   name text not null check (length(name) between 1 and 150),
-  role text not null default 'entry' check (role in ('admin','manager','entry'))
+  role text not null default 'pending' check (role in ('admin','manager','entry','pending'))
 );
 create table public.bar_settings (
   id integer primary key default 1 check (id = 1),
@@ -155,11 +155,11 @@ end $$;
 
 create function public.create_profile() returns trigger language plpgsql security definer set search_path=public,pg_temp as $$
 begin
-  insert into public.profiles(id,name,role) values(new.id,left(coalesce(nullif(new.raw_user_meta_data->>'name',''),split_part(new.email,'@',1),'Utilisateur'),150),'entry');
+  insert into public.profiles(id,name,role) values(new.id,left(coalesce(nullif(new.raw_user_meta_data->>'name',''),split_part(new.email,'@',1),'Utilisateur'),150),'pending');
   return new;
 end $$;
 create trigger auth_user_created after insert on auth.users for each row execute function public.create_profile();
-insert into public.profiles(id,name,role) select id,left(coalesce(nullif(raw_user_meta_data->>'name',''),split_part(email,'@',1),'Utilisateur'),150),'entry' from auth.users on conflict do nothing;
+insert into public.profiles(id,name,role) select id,left(coalesce(nullif(raw_user_meta_data->>'name',''),split_part(email,'@',1),'Utilisateur'),150),'pending' from auth.users on conflict do nothing;
 
 create function public.check_debt_limit(employee uuid, value bigint, kind text) returns void language plpgsql security definer set search_path=public,pg_temp as $$
 declare settings public.bar_settings%rowtype; outstanding bigint;
@@ -187,6 +187,7 @@ declare
 begin
   select * into actor from public.profiles where id=auth.uid();
   if not found then raise exception 'Connexion requise.'; end if;
+  if actor.role='pending' then raise exception 'Votre compte attend l’attribution d’un rôle par l’administrateur.'; end if;
   if p_id is null or jsonb_typeof(p)<>'object' or action is null then raise exception 'Commande invalide.'; end if;
   -- Serializes financial writes for this establishment, including offline retries.
   perform pg_advisory_xact_lock(763412001);
@@ -342,6 +343,7 @@ declare actor public.profiles%rowtype; settings public.bar_settings%rowtype; res
 begin
   select * into actor from public.profiles where id=auth.uid();
   if not found then raise exception 'Connexion requise.'; end if;
+  if actor.role='pending' then raise exception 'Votre compte attend l’attribution d’un rôle par l’administrateur.'; end if;
   select * into strict settings from public.bar_settings where id=1;
   result := jsonb_build_object(
     'settings',jsonb_build_object('barName',settings.bar_name,'location',settings.location,'shortageAlert',settings.shortage_alert,'debtLimit',settings.debt_limit,'advanceLimit',settings.advance_limit,'deductionCap',settings.deduction_cap,'closingTime',settings.closing_time,'creditAllowed',settings.credit_allowed),

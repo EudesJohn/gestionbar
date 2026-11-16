@@ -33,11 +33,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const fetchRemote = useCallback(async () => {
     if (!supabase || !owner.current) return;
     const who = owner.current;
-    const { data: result, error: rpcError } = await supabase.rpc('get_snapshot');
-    if (rpcError) throw new Error(rpcError.message);
+    const { data: result, error: rpcError, status } = await supabase.rpc('get_snapshot');
     if (owner.current !== who) return;
+    if (rpcError) {
+      if ((status >= 400 && status < 500 && status !== 408 && status !== 429) || rpcError.code === 'P0001') {
+        const cleared = emptyData();
+        stateRef.current = { data: cleared, profile: null };
+        setData(cleared); setProfile(null); setProfiles([]); setPending([]);
+        await db.cache.delete(who);
+      }
+      throw new Error(rpcError.message);
+    }
     const snapshot = result as { data: Data; profile: Profile; profiles: Profile[] };
     await db.cache.put({ key: who, ...snapshot });
+    if (owner.current !== who) return;
     setData(snapshot.data); setProfile(snapshot.profile); setProfiles(snapshot.profiles);
     stateRef.current = { data: snapshot.data, profile: snapshot.profile };
   }, []);
@@ -56,9 +65,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         await db.queue.delete(item.id);
       }
       await fetchRemote();
-      await refreshQueue();
     } catch (e) { setError(e instanceof Error ? e.message : 'Connexion impossible. Les saisies sont conservées.'); }
-    finally { lock.current = false; setBusy(false); }
+    finally { await refreshQueue(); lock.current = false; setBusy(false); }
   }, [fetchRemote, refreshQueue]);
   useEffect(() => {
     let disposed = false;
@@ -72,7 +80,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           await db.cache.put({ key: 'demo', data: next, profile: demoProfile, profiles: [] });
         } else if (userId) {
           const cached = await db.cache.get(userId);
-          if (cached && !disposed) { setData(cached.data); setProfile(cached.profile); setProfiles(cached.profiles); }
+          if (cached && !disposed && token === generation.current && owner.current === userId) { setData(cached.data); setProfile(cached.profile); setProfiles(cached.profiles); }
           if (navigator.onLine) await fetchRemote();
           else if (!cached) throw new Error('Une première connexion à Internet est nécessaire.');
           await refreshQueue();
@@ -84,7 +92,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     else {
       void supabase.auth.getSession().then(({ data: session }) => load(session.session?.user.id));
       const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_OUT' || (event === 'SIGNED_IN' && session?.user.id !== owner.current)) queueMicrotask(() => void load(session?.user.id));
+        if (event === 'SIGNED_OUT' || (event === 'SIGNED_IN' && (session?.user.id !== owner.current || !stateRef.current.profile))) queueMicrotask(() => void load(session?.user.id));
       });
       return () => { disposed = true; listener.subscription.unsubscribe(); };
     }
@@ -105,6 +113,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const execute = async (command: Command): Promise<'saved' | 'queued'> => {
     if (lock.current) throw new Error('Une opération est en cours. Veuillez patienter.');
     const current = stateRef.current; if (!current.profile) throw new Error('Connectez-vous pour continuer.');
+    if (supabase && ['sheet.create', 'day.close'].includes(command.type) && current.data.calculationVersion !== 2) throw new Error('La mise à jour des règles de calcul est en attente. Installez la migration de phase 1 pour valider une fiche.');
     const next = command.type === 'profile.role' && supabase ? current.data : applyCommand(current.data, command, current.profile);
     lock.current = true; setBusy(true);
     try {

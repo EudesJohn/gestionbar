@@ -19,9 +19,19 @@ describe('financial invariants', () => {
     expect(data.debts[0].balance).toBe(5000); expect(data.sheets[0].lines[0].price).toBe(1000);
     expect(summary(data.sheets).sales).toBe(100000);
   });
-  it('retains unsold merchandise without treating it as a cash shortage', () => {
+  it('uses all received merchandise even if the declared sold quantity is lower', () => {
     const data = applyCommand(fixture(), { type: 'sheet.create', payload: sheet({ lines: [{ productId: 'product', received: 100, sold: 80, price: 1000, cost: 500 }], cash: 65000 }) }, admin);
-    expect(data.sheets[0].shortage).toBe(0); expect(data.products[0].stock).toBe(100); expect(data.debts).toHaveLength(0);
+    expect(data.sheets[0].shortage).toBe(20000); expect(data.products[0].stock).toBe(100); expect(data.debts[0].balance).toBe(20000);
+  });
+  it('100 bottles at 500 and 45,000 remitted creates a 5,000 employee debt and restores salary after settlement', () => {
+    const source = fixture(); source.products[0].price = 500;
+    let data = applyCommand(source, { type: 'sheet.create', payload: sheet({ cash: 45000, momo: 0 }) }, admin);
+    expect(data.sheets[0].shortage).toBe(5000);
+    expect(data.debts[0].employeeId).toBe('employee');
+    expect(payrollPreview(data, data.employees[0], today().slice(0, 7)).net).toBe(25000);
+    data = applyCommand(data, { type: 'debt.settle', payload: { id: data.debts[0].id, amount: 5000, date: today(), method: 'cash', note: 'Dette soldée' } }, admin);
+    expect(payrollPreview(data, data.employees[0], today().slice(0, 7)).net).toBe(30000);
+    expect(data.products[0].stock).toBe(100);
   });
   it('refunds reduce payroll deductions, salary payments never charge the same debt twice', () => {
     let data = applyCommand(fixture(), { type: 'sheet.create', payload: sheet() }, admin);

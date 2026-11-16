@@ -20,7 +20,7 @@ const navigation = [
   { id: 'payroll', label: 'Salaires', icon: BookOpen },
   { id: 'reports', label: 'Rapports', icon: ChartNoAxesCombined },
 ] as const;
-const roles = { admin: 'Administrateur', manager: 'Gérant', entry: 'Saisie' };
+const roles = { admin: 'Administrateur', manager: 'Gérant', entry: 'Saisie', pending: 'Accès en attente' };
 export function App() {
   const store = useStore(); const { data, profile, demo, loading, error, online, pending } = store;
   const [page, setPage] = useState<Page>('dashboard'); const [date, setDate] = useState(today);
@@ -32,7 +32,10 @@ export function App() {
   const navigate = (next: Page) => { setPage(next); setSidebar(false); setSearch(false); window.scrollTo(0, 0); };
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 4500); return () => clearTimeout(timer); }, [toast]);
   useEffect(() => { const key = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setSearch(v => !v); } if (e.key === 'Escape') setSidebar(false); }; window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key); }, []);
-  useEffect(() => { if (profile?.role === 'entry') setPage('daily'); }, [profile?.role]);
+  useEffect(() => {
+    setModal(null); setNotifications(false); setSearch(false); setSidebar(false);
+    setPage(profile?.role === 'entry' ? 'daily' : 'dashboard');
+  }, [profile?.id, profile?.role]);
   if (loading) return <div className="loading-screen"><span className="brand-icon"><Wine size={30} /></span><h1>Comptoir<span>.</span></h1><p>Votre bar prend place…</p><span className="loader" /></div>;
   if (!profile) return <Login error={error} />;
   const currentLabel = page === 'settings' ? 'Paramètres' : navigation.find(n => n.id === page)?.label;
@@ -51,6 +54,7 @@ export function App() {
     <div className="main-shell"><header className="topbar"><div className="breadcrumb"><button className="icon-button mobile-menu" aria-label="Ouvrir le menu" onClick={() => setSidebar(true)}><Menu size={22} /></button><span className="breadcrumb-home">Espace de gestion</span><ChevronRight size={13} className="breadcrumb-home" /><strong>{currentLabel}</strong></div><div className="topbar-actions"><button className="global-search" onClick={() => setSearch(true)}><Search size={16} /><span>Rechercher…</span><kbd>⌘ K</kbd></button><span className={`connection-status ${!online ? 'offline' : ''}`}>{online ? <CloudCheck size={15} /> : <WifiOff size={15} />}<span>{demo ? 'Mode démo' : !online ? 'Hors connexion' : pending.length ? `${pending.length} en attente` : 'Connecté'}</span></span><button className="notification-button icon-button" aria-label="Voir les notifications" onClick={() => setNotifications(true)}><Bell size={19} /><i /></button><div className="topbar-divider" /><button className="profile-button" onClick={() => setModal({ type: 'account' })}><Avatar name={profile.name} color="#e8e5de" /><span><strong>{profile.name}</strong><small>{roles[profile.role]}</small></span><ChevronDown size={13} /></button></div></header>
       <main id="main-content" className="main-content">
         {error && <div className="status-banner error-banner"><CircleHelp size={17} /><span>{error}</span><button onClick={() => void store.sync()}>Réessayer</button></div>}
+        {!demo && data.calculationVersion !== 2 && <div className="status-banner"><CircleHelp size={17} /><span>La base attend la mise à jour de phase 1. La validation des nouvelles fiches est suspendue jusqu’à son installation.</span></div>}
         {!online && <div className="status-banner"><WifiOff size={17} /><span>{demo ? 'Mode hors connexion : vos changements restent enregistrés sur cet appareil.' : 'Hors connexion : les nouvelles fiches sont conservées en attente de validation serveur.'}</span></div>}
         {!!pending.length && <div className="status-banner"><RefreshCw size={17} /><span>{pending.length} fiche(s) en attente. Les totaux affichent uniquement les fiches validées.</span><button onClick={() => setModal({ type: 'queue' })}>Vérifier</button></div>}
         {page === 'dashboard' ? <Dashboard date={date} setDate={setDate} navigate={navigate} open={setModal} notify={notify} /> : <Pages page={page} date={date} setDate={setDate} open={setModal} notify={notify} />}
@@ -66,6 +70,17 @@ export function App() {
 }
 function ArrowIcon() { return <ChevronRight size={14} />; }
 function Login({ error: initialError }: { error: string }) {
-  const { signIn } = useStore(); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
-  return <div className="login-page"><div className="login-aside"><span className="brand-icon"><Wine size={36} /></span><h1>Votre bar.<br />Votre équipe.<br /><span>L’esprit tranquille.</span></h1><p>À Pobè comme à Cotonou, gardez le fil de votre activité avec Comptoir.</p><span className="login-footer">COMPT OIR · LA GESTION, AU CLAIR.</span></div><div className="login-content"><form onSubmit={async e => { e.preventDefault(); setBusy(true); setError(''); try { await signIn(email, password); } catch (err) { setError((err as Error).message); } finally { setBusy(false); } }}><Badge>Votre espace de gestion</Badge><h2>Heureux de vous retrouver.</h2><p>Connectez-vous pour suivre votre établissement.</p><Field label="Adresse e-mail"><Input type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} required placeholder="vous@exemple.com" /></Field><Field label="Mot de passe"><Input type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="Votre mot de passe" /></Field><ErrorMessage error={error || initialError} /><Button type="submit" disabled={busy}>{busy ? 'Connexion…' : 'Se connecter'}<ChevronRight size={16} /></Button><p className="login-help">Votre compte est créé par l’administrateur de votre établissement.</p></form></div></div>;
+  const { signIn, signOut, sync } = useStore(); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  return <div className="login-page">
+    <div className="login-aside"><span className="brand-icon"><Wine size={36} /></span><h1>Votre bar.<br />Votre équipe.<br /><span>L’esprit tranquille.</span></h1><p>À Pobè comme à Cotonou, gardez le fil de votre activité avec Comptoir.</p><span className="login-footer">COMPTOIR · LA GESTION, AU CLAIR.</span></div>
+    <div className="login-content"><form onSubmit={async e => { e.preventDefault(); setBusy(true); setError(''); try { await signIn(email, password); } catch (err) { setError((err as Error).message); } finally { setBusy(false); } }}>
+      <Badge>Votre espace de gestion</Badge><h2>Heureux de vous retrouver.</h2><p>Connectez-vous pour suivre votre établissement.</p>
+      <Field label="Adresse e-mail"><Input type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} required placeholder="vous@exemple.com" /></Field>
+      <Field label="Mot de passe"><Input type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="Votre mot de passe" /></Field>
+      <ErrorMessage error={error || initialError} />
+      <Button type="submit" disabled={busy}>{busy ? 'Connexion…' : 'Se connecter'}<ChevronRight size={16} /></Button>
+      {initialError && <><Button type="button" variant="secondary" disabled={busy} onClick={() => void sync()}>Vérifier mon accès</Button><Button type="button" variant="ghost" disabled={busy} onClick={async () => { try { await signOut(); setError(''); } catch (e) { setError((e as Error).message); } }}>Changer de compte</Button></>}
+      <p className="login-help">Votre compte est créé par l’administrateur de votre établissement.</p>
+    </form></div>
+  </div>;
 }

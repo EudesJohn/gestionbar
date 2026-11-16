@@ -22,7 +22,7 @@ npm run test:e2e    # parcours desktop et mobile avec Playwright
 ## Activer Supabase
 
 1. Créez un projet Supabase.
-2. Exécutez [`supabase/migrations/202611160001_comptoir.sql`](<supabase/migrations/202611160001_comptoir.sql>) dans l’éditeur SQL.
+2. Exécutez les fichiers de `supabase/migrations` dans l’ordre : `202611160001_comptoir.sql`, puis `202611160002_phase1_rules.sql`. Sur une base où le premier script est déjà installé, exécutez uniquement le second.
 3. Créez le premier compte dans **Authentication → Users**.
 4. Donnez-lui le rôle `admin` dans `public.profiles` :
 
@@ -46,7 +46,8 @@ VITE_SUPABASE_ANON_KEY=votre-cle-publique
 - Les montants sont des entiers FCFA.
 - Une seule fiche validée par serveuse et par date.
 - La remise de marchandise est rattachée à la serveuse et sort du stock une seule fois.
-- Les invendus restent confiés à la serveuse ; ils ne sont pas comptés comme un manquant.
+- Le manquant est calculé sur la valeur de la marchandise prise, moins cash, Momo, dépenses justifiées et crédits clients. Le reste déclaré ne diminue pas automatiquement la dette.
+- Les fiches historiques gardent la formule utilisée lors de leur validation.
 - Un manquant et une vente à crédit créent une dette rattachée à la serveuse.
 - Un remboursement réduit le même solde que la retenue salariale.
 - La retenue mensuelle est plafonnée par le paramètre de l’établissement ; le reliquat est reporté.
@@ -70,3 +71,7 @@ npm run build
 ```
 
 Ajoutez les deux variables `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY` dans les variables d’environnement Vercel. `vercel.json` conserve le routage de la PWA et ajoute quelques en-têtes de protection.
+
+Pour permettre à l’administrateur de créer les autres comptes depuis **Paramètres → Comptes & rôles**, configurez `SUPABASE_SERVICE_ROLE_KEY` comme **Secret** côté serveur Vercel. Aucun préfixe `VITE_` ne doit être ajouté à cette variable. `api/accounts.ts` vérifie la session Supabase et le rôle courant avant d’appeler l’API Auth ; la base revalide l’administrateur lors de l’attribution du rôle. Cette route est disponible avec `vercel dev` ou sur Vercel, pas avec le serveur Vite seul.
+
+Le détail de cette livraison et les limites connues figurent dans [docs/PHASE_1.md](docs/PHASE_1.md).

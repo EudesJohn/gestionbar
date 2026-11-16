@@ -3,7 +3,7 @@ import { shiftDate, today, uid } from './format';
 import { shortageValue } from './domain';
 
 export function emptyData(): Data {
-  return { employees: [], products: [], sheets: [], debts: [], settlements: [], movements: [], payrolls: [], audit: [], closures: [], settings: { barName: 'Le Comptoir', location: 'Pobè, Bénin', shortageAlert: 5000, debtLimit: 50000, advanceLimit: 15000, deductionCap: 50, closingTime: '23:00', creditAllowed: true } };
+  return { calculationVersion: 2, employees: [], products: [], sheets: [], debts: [], settlements: [], movements: [], payrolls: [], audit: [], closures: [], settings: { barName: 'Le Comptoir', location: 'Pobè, Bénin', shortageAlert: 5000, debtLimit: 50000, advanceLimit: 15000, deductionCap: 50, closingTime: '23:00', creditAllowed: true } };
 }
 export function createDemoData(): Data {
   const data = emptyData(); const date = today();

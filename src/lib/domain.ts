@@ -4,7 +4,8 @@ import { today, uid } from './format';
 export const activeSheets = (data: Data, date?: string) => data.sheets.filter(s => s.status === 'validated' && (!date || s.date === date));
 export const salesValue = (sheet: Sheet) => sheet.lines.reduce((sum, l) => sum + l.sold * l.price, 0);
 export const receivedValue = (sheet: Sheet) => sheet.lines.reduce((sum, l) => sum + l.received * l.price, 0);
-export const shortageValue = (sheet: Sheet) => salesValue(sheet) - sheet.cash - sheet.momo - sheet.expense - sheet.credit;
+export const accountableValue = (sheet: Sheet) => sheet.shortageBasis === 'received' ? receivedValue(sheet) : salesValue(sheet);
+export const shortageValue = (sheet: Sheet) => accountableValue(sheet) - sheet.cash - sheet.momo - sheet.expense - sheet.credit;
 export const remainingValue = (sheet: Sheet) => receivedValue(sheet) - salesValue(sheet);
 export const debtTotal = (data: Data, employeeId?: string) => data.debts.filter(d => !employeeId || d.employeeId === employeeId).reduce((s, d) => s + d.balance, 0);
 export function summary(sheets: Sheet[]) {
@@ -19,6 +20,7 @@ export function payrollPreview(data: Data, employee: Employee, month: string, bo
   return { base: employee.salary, bonus, deductions, net: employee.salary + bonus - deductions, carry: outstanding - deductions, allocations };
 }
 export function allowed(profile: Profile, type: Command['type']) {
+  if (profile.role === 'pending') return false;
   if (profile.role === 'admin') return true;
   if (profile.role === 'entry') return type === 'sheet.create';
   return !['employee.salary', 'payroll.pay', 'settings.update', 'profile.role'].includes(type);
@@ -85,7 +87,9 @@ export function applyCommand(source: Data, command: Command, profile: Profile): 
       ensure(!s.expense || s.expenseNote.trim().length >= 3, 'Justifiez les dépenses.');
       ensure(!s.credit || (data.settings.creditAllowed && s.client.trim().length >= 2), 'Le crédit doit être autorisé et le client identifié.');
       ensure(s.deposit <= s.cash + s.momo, 'Le dépôt ne peut pas dépasser le total remis.');
-      const shortage = shortageValue(s); ensure(shortage >= 0, 'Le total déclaré dépasse les ventes. Corrigez les montants avant validation.');
+      s.shortageBasis = 'received';
+      ensure(receivedValue(s) <= 1_000_000_000, 'La valeur totale de la fiche dépasse le maximum autorisé.');
+      const shortage = shortageValue(s); ensure(shortage >= 0, 'Le total déclaré dépasse la marchandise prise. Corrigez les montants avant validation.');
       // A real shortage must always be recorded, even if it exceeds a warning limit.
       if (s.credit) checkDebtLimit(data, e.id, s.credit, 'credit');
       s.shortage = shortage; s.status = 'validated'; s.createdAt = now;
