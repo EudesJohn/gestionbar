@@ -36,7 +36,12 @@ export default defineConfig(({ mode }) => {
         start_url: '/',
         icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
       },
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,woff2}'], maximumFileSizeToCacheInBytes: 4000000 },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,svg,woff2}'],
+        maximumFileSizeToCacheInBytes: 4000000,
+        importScripts: ['/auth-upgrade.js'],
+        clientsClaim: true,
+      },
     }),
   ],
   server: { port: 5173, strictPort: true },

@@ -43,6 +43,8 @@ Installer dans l’ordre `001`, `002`, `003`, `004_security_hardening`, `005_adm
 
 À la première connexion, l’utilisateur configure une application TOTP sur son téléphone puis saisit le code. Les secrets TOTP de production ne doivent pas être copiés dans le dépôt, les journaux, les captures d’écran ou les mots de passe de test.
 
+Si une ancienne PWA affiche `MFA_REQUIRED` sur le formulaire de connexion, le mot de passe a pu être accepté mais l’ancienne interface ne possède pas l’étape de configuration. La mise à jour de l’écran de connexion doit être chargée. Le bouton « Mettre à jour » est affiché sur les écrans de connexion, de chargement et de double authentification. Une transition unique de service worker récupère les installations antérieures bloquées ; elle ne modifie pas IndexedDB ni les fiches en attente. Les mises à jour suivantes demandent l’action de l’utilisateur.
+
 En cas de perte du téléphone : le propriétaire du projet vérifie l’identité hors application, supprime le facteur perdu via l’administration Supabase, révoque les sessions et fait réenrôler l’utilisateur. Aucun bouton « ignorer la double authentification » n’existe.
 
 La CSP autorise les styles inline nécessaires aux indicateurs et graphiques React ; elle n’autorise pas les scripts inline. Ce n’est pas une preuve d’absence de XSS. Les quatre alertes faibles actuellement signalées par l’audit complet concernent la chaîne de génération PWA ; l’audit de production ne signale pas de vulnérabilité connue à la date du contrôle.

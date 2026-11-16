@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Bell, BookOpen, ChartNoAxesCombined, Check, ChevronDown, ChevronRight, CircleHelp, ClipboardList, CloudCheck, LayoutDashboard, Menu, Package, Search, Settings, ShieldCheck, Smartphone, Store, Users, Wallet, Wine, X, WifiOff, RefreshCw } from 'lucide-react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { useStore } from './store';
@@ -28,7 +28,21 @@ export function App() {
   const [modal, setModal] = useState<ModalState | null>(null); const [sidebar, setSidebar] = useState(false);
   const [toast, setToast] = useState(''); const [search, setSearch] = useState(false); const [query, setQuery] = useState('');
   const [notifications, setNotifications] = useState(false); const [help, setHelp] = useState(false);
-  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW();
+  const serviceWorker = useRef<ServiceWorkerRegistration | undefined>(undefined);
+  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({
+    onRegisteredSW(_url, registration) {
+      serviceWorker.current = registration;
+      if (navigator.onLine) void registration?.update().catch(() => undefined);
+    },
+  });
+  useEffect(() => {
+    const checkForUpdate = () => {
+      if (navigator.onLine && document.visibilityState === 'visible') void serviceWorker.current?.update().catch(() => undefined);
+    };
+    window.addEventListener('online', checkForUpdate);
+    document.addEventListener('visibilitychange', checkForUpdate);
+    return () => { window.removeEventListener('online', checkForUpdate); document.removeEventListener('visibilitychange', checkForUpdate); };
+  }, []);
   const notify = (text: string) => setToast(text);
   const navigate = (next: Page) => { setPage(next); setSidebar(false); setSearch(false); window.scrollTo(0, 0); };
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 4500); return () => clearTimeout(timer); }, [toast]);
@@ -37,9 +51,10 @@ export function App() {
     setModal(null); setNotifications(false); setSearch(false); setSidebar(false);
     setPage('dashboard');
   }, [profile?.id, profile?.role]);
-  if (loading) return <div className="loading-screen"><span className="brand-icon"><Wine size={30} /></span><h1>Comptoir<span>.</span></h1><p>Votre bar prend place…</p><span className="loader" /></div>;
-  if (store.mfa) return <MfaScreen />;
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return <Login error={error} />;
+  const updateNotice = needRefresh ? <div className="update-banner" role="status">Une nouvelle version est disponible.<Button onClick={() => void updateServiceWorker(true)}>Mettre à jour</Button></div> : null;
+  if (loading) return <><div className="loading-screen"><span className="brand-icon"><Wine size={30} /></span><h1>Comptoir<span>.</span></h1><p>Votre bar prend place…</p><span className="loader" /></div>{updateNotice}</>;
+  if (store.mfa) return <><MfaScreen />{updateNotice}</>;
+  if (!profile || !['admin', 'manager'].includes(profile.role)) return <><Login error={error} />{updateNotice}</>;
   const currentLabel = page === 'settings' ? 'Paramètres' : navigation.find(n => n.id === page)?.label;
   const lowStock = data.products.filter(p => p.stock <= p.threshold);
   const visibleNavigation = navigation;
@@ -64,7 +79,7 @@ export function App() {
     </div>
     {modal && <Forms modal={modal} date={date} close={() => setModal(null)} open={setModal} notify={notify} />}
     {toast && <div className="toast" role="status"><span><Check size={17} /></span>{toast}<button aria-label="Fermer la notification" onClick={() => setToast('')}><X size={16} /></button></div>}
-    {needRefresh && <div className="update-banner">Une nouvelle version est disponible.<Button onClick={() => void updateServiceWorker(true)}>Mettre à jour</Button></div>}
+    {updateNotice}
     {search && <Modal title="Retrouvez l’essentiel" description="Une serveuse, un produit ou un espace de travail." onClose={() => setSearch(false)}><div className="modal-body"><SearchInput value={query} onChange={setQuery} placeholder="Que recherchez-vous ?" /><div className="search-results">{visibleNavigation.filter(n => n.label.toLowerCase().includes(query.toLowerCase())).map(n => <button key={n.id} onClick={() => navigate(n.id)}><n.icon size={18} /><span>{n.label}<small>Espace de travail</small></span><ChevronRight size={15} /></button>)}{query && data.employees.filter(e => e.name.toLowerCase().includes(query.toLowerCase())).slice(0, 5).map(e => <button key={e.id} onClick={() => { setSearch(false); setModal({ type: 'employee-detail', id: e.id }); }}><Avatar name={e.name} size="sm" color={e.color} /><span>{e.name}<small>Personnel</small></span><ChevronRight size={15} /></button>)}{query && data.products.filter(p => p.name.toLowerCase().includes(query.toLowerCase())).slice(0, 5).map(p => <button key={p.id} onClick={() => navigate('products')}><Wine size={18} /><span>{p.name}<small>{fcfa(p.price)} · {p.stock} en réserve</small></span><ChevronRight size={15} /></button>)}</div></div></Modal>}
     {notifications && <Modal title="Vos notifications" description="Les points à suivre pour votre établissement." onClose={() => setNotifications(false)}><div className="modal-body notification-list">{lowStock.map(p => <button key={p.id} onClick={() => { setNotifications(false); navigate('stock'); }}><span className="attention-icon tint-orange"><Package size={20} /></span><span><strong>Stock bas : {p.name}</strong><small>{p.stock} bouteilles restantes · seuil de {p.threshold}</small></span><ChevronRight size={16} /></button>)}{data.debts.filter(d => d.balance >= data.settings.shortageAlert).slice(0, 5).map(d => <button key={d.id} onClick={() => { setNotifications(false); navigate('debts'); }}><span className="attention-icon tint-rose"><Wallet size={20} /></span><span><strong>{data.employees.find(e => e.id === d.employeeId)?.name}</strong><small>{fcfa(d.balance)} à régulariser</small></span><ChevronRight size={16} /></button>)}<p className="muted">Ces alertes sont calculées à partir des données enregistrées.</p></div></Modal>}
     {help && <Modal title="Bienvenue chez Comptoir" description="Les bons gestes pour garder une gestion claire." onClose={() => setHelp(false)}><div className="modal-body guide"><div><span>01</span><section><h3>Préparez votre établissement</h3><p>Ajoutez vos serveuses, les prix de vos produits et le stock initial. Les montants de démonstration sont fictifs.</p></section></div><div><span>02</span><section><h3>Une fiche, chaque jour</h3><p>Enregistrez les produits reçus et vendus, le cash, le Momo et les dépenses. Les invendus restent rattachés à la serveuse.</p></section></div><div><span>03</span><section><h3>Régularisez puis clôturez</h3><p>Les manquants créent une dette. Un remboursement réduit son solde. Le salaire tient compte des dettes encore dues, dans la limite paramétrée.</p></section></div><div className="info-box"><Smartphone size={20} /><p>Sur Android, ouvrez le menu du navigateur puis « Installer l’application » pour garder Comptoir sur votre écran d’accueil.</p></div></div></Modal>}
