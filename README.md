@@ -1,0 +1,72 @@
+# Comptoir — gestion de bar
+
+Application web mobile-first pour suivre les ventes, le stock, les dettes, les manquants et les salaires du bar de Pobè.
+
+## Démarrer en local
+
+```bash
+npm install
+npm run dev
+```
+
+Ouvrez `http://localhost:5173`. Sans variables Supabase, l’application démarre en **mode démonstration** avec des données fictives conservées dans IndexedDB. Les boutons et les formulaires permettent de parcourir les parcours métier avant de connecter un établissement.
+
+Vérifications disponibles :
+
+```bash
+npm run build       # build Vite + génération de la PWA
+npm test            # invariants métier + tests PostgreSQL PGlite
+npm run test:e2e    # parcours desktop et mobile avec Playwright
+```
+
+## Activer Supabase
+
+1. Créez un projet Supabase.
+2. Exécutez [`supabase/migrations/202611160001_comptoir.sql`](<supabase/migrations/202611160001_comptoir.sql>) dans l’éditeur SQL.
+3. Créez le premier compte dans **Authentication → Users**.
+4. Donnez-lui le rôle `admin` dans `public.profiles` :
+
+```sql
+update public.profiles
+set role = 'admin', name = 'Eudes Johnson'
+where id = 'UUID_DU_COMPTE';
+```
+
+5. Copiez `.env.example` vers `.env.local` et renseignez l’URL du projet ainsi que la clé publique anon :
+
+```env
+VITE_SUPABASE_URL=https://votre-projet.supabase.co
+VITE_SUPABASE_ANON_KEY=votre-cle-publique
+```
+
+6. Redémarrez Vite. La saisie passe alors par les RPC transactionnelles `get_snapshot` et `apply_command` ; les tables financières ne sont pas accessibles directement au navigateur.
+
+## Règles implémentées
+
+- Les montants sont des entiers FCFA.
+- Une seule fiche validée par serveuse et par date.
+- La remise de marchandise est rattachée à la serveuse et sort du stock une seule fois.
+- Les invendus restent confiés à la serveuse ; ils ne sont pas comptés comme un manquant.
+- Un manquant et une vente à crédit créent une dette rattachée à la serveuse.
+- Un remboursement réduit le même solde que la retenue salariale.
+- La retenue mensuelle est plafonnée par le paramètre de l’établissement ; le reliquat est reporté.
+- Une fiche validée reste dans l’historique. Sa correction passe par une écriture inverse avec motif.
+- La clôture verrouille la journée et empêche les corrections ultérieures.
+- Les commandes synchronisées sont idempotentes grâce à un identifiant de commande.
+- Le journal d’audit et les mouvements financiers sont protégés côté PostgreSQL.
+
+## Points à confirmer avant exploitation réelle
+
+Les hypothèses visibles dans **Paramètres → Établissement** doivent être confirmées avec le promoteur : définition du dépôt, formule exacte de la différence de la fiche papier, plafond de retenue, prorata d’un mois incomplet, autorisation et plafond des crédits clients, et éventuelles primes ou commissions.
+
+Le récapitulatif de journée peut être partagé depuis l’écran de clôture. L’envoi WhatsApp automatique et les notifications push sont prévus pour une phase ultérieure ; le bouton de partage ouvre le récapitulatif prêt à envoyer.
+
+## Déploiement
+
+Le projet est préparé pour Vercel :
+
+```bash
+npm run build
+```
+
+Ajoutez les deux variables `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY` dans les variables d’environnement Vercel. `vercel.json` conserve le routage de la PWA et ajoute quelques en-têtes de protection.
