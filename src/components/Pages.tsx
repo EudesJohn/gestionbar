@@ -6,6 +6,7 @@ import { dateLabel, fcfa, money, monthLabel, shiftDate, today } from '../lib/for
 import { exportReport } from '../lib/exports';
 import type { Page, Settings as SettingsType } from '../types';
 import { AccountsPanel } from './AccountsPanel';
+import { AdminCredentials } from './AdminCredentials';
 import type { ModalState } from './Forms';
 import { debtLabels } from './Forms';
 import { Avatar, Badge, Button, Empty, ErrorMessage, Field, Input, PageTitle, SearchInput, SectionTitle, Select, Stat } from './ui';
@@ -76,6 +77,7 @@ function SettingsPage({ notify }: Props) {
     <div className="list-toolbar standalone"><div className="segmented">
       <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>Établissement</button>
       <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>Comptes & rôles</button>
+      <button className={tab === 'credentials' ? 'active' : ''} onClick={() => setTab('credentials')}>Mon compte</button>
       <button className={tab === 'audit' ? 'active' : ''} onClick={() => setTab('audit')}>Journal d’activité</button>
     </div></div>
     {tab === 'general' && <div className="settings-grid">
@@ -108,6 +110,7 @@ function SettingsPage({ notify }: Props) {
       </ul></section><div className="info-box"><ShieldCheck size={22} /><p>{demo ? 'Les données de démonstration sont fictives et conservées sur cet appareil.' : 'Les droits et les calculs sont contrôlés par la base de données à chaque validation.'}</p></div></div>
     </div>}
     {tab === 'accounts' && <AccountsPanel notify={notify} />}
+    {tab === 'credentials' && <AdminCredentials notify={notify} />}
     {tab === 'audit' && <section className="panel">
       <SectionTitle title="Journal d’activité" description={demo ? 'Historique local des actions de démonstration.' : 'Historique écrit par la base, sans modification ni suppression depuis l’application.'} action={<History size={20} />} />
       <div className="table-scroll"><table><thead><tr><th>Date / heure</th><th>Auteur</th><th>Action</th><th>Détail</th></tr></thead><tbody>

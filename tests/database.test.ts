@@ -4,17 +4,23 @@ import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 
 const admin = randomUUID(), manager = randomUUID(), entry = randomUUID(), employee = randomUUID(), product = randomUUID();
+const sessions = new Map<string, string>();
 let db: PGlite; let date: string;
-async function user(id: string) { await db.query("select set_config('request.jwt.claim.sub',$1,false)", [id]); }
+async function user(id: string, aal = 'aal2') {
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)", [id]);
+  await db.query("select set_config('request.jwt.claims',$1,false)", [JSON.stringify({ sub: id, aal, session_id: sessions.get(id) })]);
+}
 async function command(type: string, payload: object, id = randomUUID()) { return db.query('select public.apply_command($1,$2::jsonb) as result', [id, JSON.stringify({ type, payload })]); }
 async function snapshot() { const result = await db.query<{ state: { data: import('../src/types').Data; profile: import('../src/types').Profile } }>('select public.get_snapshot() as state'); return result.rows[0].state; }
 beforeAll(async () => {
   db = new PGlite();
   await db.exec(`create role anon; create role authenticated; create schema auth;
-    create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb not null default '{}');
+    create table auth.users(id uuid primary key,email text,encrypted_password text,raw_user_meta_data jsonb not null default '{}');
+    create table auth.sessions(id uuid primary key,user_id uuid not null,created_at timestamptz not null default now(),not_after timestamptz);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+    create function auth.jwt() returns jsonb language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb $$;
     grant usage on schema auth,public to authenticated,anon;
-    grant execute on function auth.uid() to authenticated,anon;`);
+    grant execute on function auth.uid(),auth.jwt() to authenticated,anon;`);
   await db.exec(await readFile(new URL('../supabase/migrations/202611160001_comptoir.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/202611160002_phase1_rules.sql', import.meta.url), 'utf8'));
   await db.query("insert into auth.users(id,email) values($1,'admin@test.local'),($2,'manager@test.local'),($3,'entry@test.local')", [admin, manager, entry]);
@@ -22,6 +28,9 @@ beforeAll(async () => {
   await db.query("update public.profiles set role='manager' where id=$1", [manager]);
   await db.query("update public.profiles set role='entry' where id=$1", [entry]);
   await db.exec(await readFile(new URL('../supabase/migrations/202611160003_remove_entry_role.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/202611160004_security_hardening.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../supabase/migrations/202611160005_admin_credentials.sql', import.meta.url), 'utf8'));
+  for (const id of [admin,manager,entry]) { const session = randomUUID(); sessions.set(id,session); await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[session,id]); }
   date = (await db.query<{ date: string }>("select to_char(public.local_day(),'YYYY-MM-DD') as date")).rows[0].date;
   await db.exec('set role authenticated'); await user(admin);
   await command('employee.create', { id: employee, name: 'Grâce Test', phone: '', sponsor: '', hiredOn: date, salary: 30000, color: '#dddddd', restDay: 0 });
@@ -106,5 +115,57 @@ describe.sequential('PostgreSQL transactions and authorization', () => {
     const state = await snapshot(); expect(state.data.closures).toHaveLength(1);
     await expect(command('sheet.reverse', { id: state.data.sheets[0].id, reason: 'Correction après clôture' })).rejects.toThrow();
     expect(state.data.audit.length).toBeGreaterThan(5);
+  });
+  it('allows setup status but no business data or commands without MFA', async () => {
+    await user(admin, 'aal1');
+    const status = await db.query<{ result: { securityVersion: number } }>('select public.get_security_status() as result');
+    expect(status.rows[0].result.securityVersion).toBe(1);
+    await expect(snapshot()).rejects.toThrow('MFA_REQUIRED');
+    await expect(command('employee.salary', { id: employee, salary: 1 })).rejects.toThrow('MFA_REQUIRED');
+    await expect(db.query('select public.authorize_account_creation()')).rejects.toThrow('MFA_REQUIRED');
+    await user(admin);
+  });
+  it('rate limits account creation in a committed server-side window', async () => {
+    await user(admin);
+    for (let i=0; i<10; i++) {
+      const result = await db.query<{ allowed: boolean }>('select public.authorize_account_creation() as allowed');
+      expect(result.rows[0].allowed).toBe(true);
+    }
+    const denied = await db.query<{ allowed: boolean }>('select public.authorize_account_creation() as allowed');
+    expect(denied.rows[0].allowed).toBe(false);
+    await user(manager);
+    expect((await db.query<{ allowed: boolean }>('select public.authorize_account_creation() as allowed')).rows[0].allowed).toBe(false);
+  });
+  it('rejects idle, expired and revoked sessions without accepting a replayed JWT', async () => {
+    await user(admin); await db.exec('reset role');
+    await db.query("update public.security_sessions set last_seen=now()-interval '16 minutes' where session_id=$1",[sessions.get(admin)]);
+    await db.exec('set role authenticated');
+    await expect(snapshot()).rejects.toThrow('SESSION_EXPIRED');
+    await db.exec('reset role');
+    await db.query('update public.security_sessions set last_seen=now() where session_id=$1',[sessions.get(admin)]);
+    await db.query("update auth.sessions set created_at=now()-interval '9 hours' where id=$1",[sessions.get(admin)]);
+    await db.exec('set role authenticated');
+    await expect(snapshot()).rejects.toThrow('SESSION_EXPIRED');
+    await db.exec('reset role');
+    await db.query('update auth.sessions set created_at=now() where id=$1',[sessions.get(admin)]);
+    await db.exec('set role authenticated');
+    await db.query('select public.revoke_current_session()');
+    await expect(snapshot()).rejects.toThrow('SESSION_REVOKED');
+    await expect(command('employee.salary',{id:employee,salary:1})).rejects.toThrow('SESSION_REVOKED');
+  });
+  it('allows only admins to change credentials and revokes sessions after a password change', async () => {
+    await user(manager);
+    const denied = await db.query<{ allowed: boolean }>("select public.authorize_admin_credentials_change('password') as allowed");
+    expect(denied.rows[0].allowed).toBe(false);
+    await db.exec('reset role');
+    const newSession = randomUUID(); sessions.set(admin,newSession);
+    await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[newSession,admin]);
+    await db.exec('set role authenticated'); await user(admin);
+    for(let i=0;i<5;i++) expect((await db.query<{ allowed: boolean }>("select public.authorize_admin_credentials_change('password') as allowed")).rows[0].allowed).toBe(true);
+    expect((await db.query<{ allowed: boolean }>("select public.authorize_admin_credentials_change('password') as allowed")).rows[0].allowed).toBe(false);
+    await db.exec('reset role');
+    await db.query("update auth.users set encrypted_password='test-hash' where id=$1",[admin]);
+    await db.exec('set role authenticated');
+    await expect(snapshot()).rejects.toThrow('SESSION_REVOKED');
   });
 });

@@ -6,6 +6,7 @@ import { Dashboard } from './components/Dashboard';
 import { Forms } from './components/Forms';
 import type { ModalState } from './components/Forms';
 import { Pages } from './components/Pages';
+import { MfaScreen } from './components/MfaScreen';
 import { Avatar, Badge, Button, ErrorMessage, Field, Input, Modal, SearchInput } from './components/ui';
 import { today, fcfa } from './lib/format';
 import type { Page } from './types';
@@ -37,7 +38,8 @@ export function App() {
     setPage('dashboard');
   }, [profile?.id, profile?.role]);
   if (loading) return <div className="loading-screen"><span className="brand-icon"><Wine size={30} /></span><h1>Comptoir<span>.</span></h1><p>Votre bar prend place…</p><span className="loader" /></div>;
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return <Login error={error || 'Votre compte attend l’attribution d’un rôle par l’administrateur.'} />;
+  if (store.mfa) return <MfaScreen />;
+  if (!profile || !['admin', 'manager'].includes(profile.role)) return <Login error={error} />;
   const currentLabel = page === 'settings' ? 'Paramètres' : navigation.find(n => n.id === page)?.label;
   const lowStock = data.products.filter(p => p.stock <= p.threshold);
   const visibleNavigation = navigation;

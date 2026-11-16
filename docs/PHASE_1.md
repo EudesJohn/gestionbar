@@ -28,7 +28,7 @@ Le compte du gérant à trois niveaux appartient à la phase 2 : aucune écritur
 
 ## Comptes de test
 
-Deux comptes fictifs sont provisionnés : administrateur et gérant. Leurs mots de passe aléatoires figurent uniquement dans `.local/ACCES_TEST.md`, ignoré par Git et Vercel. Le script de préparation n’est pas exécuté automatiquement à chaque déploiement.
+Le compte administrateur initial a été converti au compte personnel du propriétaire, en conservant son identifiant et son historique. Le gérant fictif reste disponible pour les essais. Les informations de connexion figurent uniquement dans `.local/ACCES_TEST.md`, ignoré par Git et Vercel. Les scripts de préparation ne sont pas exécutés automatiquement à chaque déploiement.
 
 Un nouveau compte public reçoit `pending`, sans lecture des données ni droit d’écriture. L’administrateur attribue le rôle depuis son espace. Les mots de passe ne sont enregistrés ni dans le journal, ni dans la file Dexie.
 
@@ -55,10 +55,10 @@ Vite sert l’interface sur `http://localhost:5173`. Les tests navigateur utilis
 
 ## Limites et phases suivantes
 
-La connexion actuelle utilise une adresse et un mot de passe Supabase. Le PIN et son verrouillage serveur restent à traiter avec la phase 3, comme indiqué dans l’ordre de travail. La matrice des permissions par action n’est pas encore personnalisable ; les rôles et les suspensions le sont.
+La connexion utilise une adresse, un mot de passe Supabase et une double authentification TOTP obligatoire après les migrations de sécurité `004` et `005`. Le propriétaire peut modifier ses identifiants dans **Paramètres → Mon compte**. Le PIN de validation des marchandises reste à traiter avec la phase 3. La matrice des permissions par action n’est pas encore personnalisable ; les rôles et les suspensions le sont.
 
 La création des comptes utilise une fonction serveur Vercel. Le déploiement d’une Supabase Edge Function nécessite un accès de gestion Supabase absent de cet environnement ; cette partie de la stack reste à aligner. Les exports Excel existants utilisent ExcelJS : l’alignement sur SheetJS relève de la phase 2.
 
 Fournisseurs, commandes, stocks à trois niveaux et compte du gérant, calendrier complet et rapprochement détaillé de la fiche papier : phase 2. PIN de validation, espace serveuse, photos de fiche, notifications push et hors connexion complet : phase 3. Les sauvegardes automatiques du projet doivent être configurées dans Supabase.
 
-La phase 2 ne commence qu’après validation de cette phase par le promoteur. La phase 1 reste à valider sur la base hébergée après installation de la migration complémentaire.
+La phase 2 ne commence qu’après validation de cette phase par le promoteur. Les renforcements d’accès demandés ensuite sont détaillés dans `SECURITE.md`.

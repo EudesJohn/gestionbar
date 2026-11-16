@@ -39,6 +39,7 @@ export interface Settings {
   advanceLimit: number; deductionCap: number; closingTime: string; creditAllowed: boolean;
 }
 export interface Data {
+  securityVersion?: number;
   calculationVersion?: number;
   employees: Employee[]; products: Product[]; sheets: Sheet[]; debts: Debt[];
   settlements: Settlement[]; movements: Movement[]; payrolls: Payroll[];

@@ -5,7 +5,11 @@ type Request = IncomingMessage & { body?: unknown };
 const roles = new Set(['admin', 'manager']);
 
 async function readBody(req: Request): Promise<unknown> {
-  if (req.body !== undefined) return typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+  if (req.body !== undefined) {
+    const raw = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    if (Buffer.byteLength(raw) > 8192) throw new Error('Body too large');
+    return JSON.parse(raw);
+  }
   let raw = '';
   for await (const chunk of req) {
     raw += chunk.toString();
@@ -22,6 +26,11 @@ export default async function handler(req: Request, res: ServerResponse) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   const reply = (status: number, body: object) => { res.statusCode = status; res.end(JSON.stringify(body)); };
   if (req.method !== 'POST') { res.setHeader('Allow', 'POST'); return reply(405, { error: 'Méthode non autorisée.' }); }
+  const allowedOrigins = new Set(['https://gestionbar-amber.vercel.app']);
+  if (process.env.VERCEL_URL) allowedOrigins.add(`https://${process.env.VERCEL_URL}`);
+  if (process.env.NODE_ENV !== 'production') { allowedOrigins.add('http://localhost:3000'); allowedOrigins.add('http://localhost:5173'); }
+  const origin = req.headers.origin;
+  if (!origin || !allowedOrigins.has(origin) || req.headers['sec-fetch-site'] === 'cross-site') return reply(403, { error: 'Origine de la demande non autorisée.' });
   const authorization = req.headers.authorization;
   if (!authorization?.startsWith('Bearer ') || authorization.length > 8192) return reply(401, { error: 'Connectez-vous pour créer un compte.' });
   if (!req.headers['content-type']?.startsWith('application/json')) return reply(415, { error: 'Format JSON requis.' });
@@ -50,10 +59,13 @@ export default async function handler(req: Request, res: ServerResponse) {
     const { name, email, password, role } = body as Record<string, unknown>;
     if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 150) return reply(422, { error: 'Indiquez un nom de 2 à 150 caractères.' });
     if (typeof email !== 'string' || email.trim().length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return reply(422, { error: 'Indiquez une adresse e-mail valide.' });
-    if (typeof password !== 'string' || password.length < 12 || password.length > 72) return reply(422, { error: 'Le mot de passe doit contenir entre 12 et 72 caractères.' });
+    if (typeof password !== 'string' || password.length < 15 || Buffer.byteLength(password, 'utf8') > 72) return reply(422, { error: 'Utilisez au moins 15 caractères, dans la limite de 72 octets.' });
     if (typeof role !== 'string' || !roles.has(role)) return reply(422, { error: 'Choisissez un rôle valide.' });
 
     const normalizedEmail = email.trim().toLowerCase();
+    const { data: permitted, error: securityError } = await userClient.rpc('authorize_account_creation');
+    if (securityError) return reply(403, { error: 'Une session active avec double authentification est nécessaire. Reconnectez-vous ou contactez l’administrateur.' });
+    if (permitted !== true) { res.setHeader('Retry-After', '600'); return reply(429, { error: 'Trop de créations de comptes. Patientez quelques minutes.' }); }
     const { data: created, error: createError } = await serverClient.auth.admin.createUser({
       email: normalizedEmail, password, email_confirm: true, user_metadata: { name: name.trim() },
     });

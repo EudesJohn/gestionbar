@@ -4,7 +4,7 @@ Le site déployé utilise le projet Supabase `aypxutnxsboyqulzlsyz`. La configur
 
 ## 1. Initialiser la base
 
-Ouvrir [SQL Editor Supabase](https://supabase.com/dashboard/project/aypxutnxsboyqulzlsyz/sql/new). Sur un projet vierge, exécuter les migrations `202611160001_comptoir.sql`, `202611160002_phase1_rules.sql` et [202611160003_remove_entry_role.sql](../supabase/migrations/202611160003_remove_entry_role.sql) dans cet ordre. Les deux premières sont déjà installées sur le projet actuel. La troisième retire le rôle historique `entry` de PostgreSQL. Elle conserve les comptes et leur historique ; un éventuel ancien compte de saisie passe en attente d’une attribution explicite par l’administrateur.
+Ouvrir [SQL Editor Supabase](https://supabase.com/dashboard/project/aypxutnxsboyqulzlsyz/sql/new). Sur un projet vierge, exécuter les migrations `001` à `005` dans l’ordre de leurs noms. Les migrations `004_security_hardening` et `005_admin_credentials` ajoutent la double authentification obligatoire, les sessions limitées, les compteurs de tentatives et la modification sécurisée des identifiants. Exécuter seulement les fichiers encore absents : ces scripts ne sont pas à rejouer sur une base déjà initialisée.
 
 La clé publique `anon` et la clé `service_role` ne sont pas des identifiants SQL. L’automatisation d’une migration nécessite une connexion PostgreSQL ou un accès à l’API de gestion Supabase.
 
@@ -23,6 +23,8 @@ where id = 'UUID_DU_COMPTE';
 Vérifier que la mise à jour affecte une ligne. Le compte peut ensuite se connecter au site. Un nouveau compte reçoit le rôle `pending` et ne peut lire ni écrire les données du bar tant qu’un administrateur ne lui attribue pas un rôle.
 
 Pour tous les autres utilisateurs, l’administrateur utilise **Paramètres → Comptes & rôles → Créer un compte** dans l’application. Il définit le nom, l’adresse de connexion, le mot de passe et le rôle. Il peut ensuite suspendre un accès ou changer son rôle au même endroit. L’API serveur exige la variable secrète `SUPABASE_SERVICE_ROLE_KEY` dans Vercel ; elle ne doit jamais porter de préfixe `VITE_`.
+
+L’administrateur modifie ses propres identifiants dans **Paramètres → Mon compte** : mot de passe actuel et session avec double authentification requis. Le changement d’adresse conserve le flux de confirmation Supabase. Un changement confirmé d’e-mail ou de mot de passe révoque les sessions métiers existantes. Aucun compte cible ne peut être transmis à cette API.
 
 ## 3. Configurer les données réelles
 

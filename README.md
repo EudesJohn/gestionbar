@@ -22,7 +22,7 @@ npm run test:e2e    # parcours desktop et mobile avec Playwright
 ## Activer Supabase
 
 1. Créez un projet Supabase.
-2. Exécutez les fichiers de `supabase/migrations` dans l’ordre : `202611160001_comptoir.sql`, `202611160002_phase1_rules.sql`, puis `202611160003_remove_entry_role.sql`. Sur une base existante, exécutez uniquement les migrations encore absentes.
+2. Exécutez les fichiers de `supabase/migrations` dans l’ordre, de `202611160001_comptoir.sql` à `202611160005_admin_credentials.sql`. Sur une base existante, exécutez uniquement les migrations encore absentes.
 3. Créez le premier compte dans **Authentication → Users**.
 4. Donnez-lui le rôle `admin` dans `public.profiles` :
 
@@ -76,3 +76,5 @@ Ajoutez les deux variables `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY` dans 
 Pour permettre à l’administrateur de créer les autres comptes depuis **Paramètres → Comptes & rôles**, configurez `SUPABASE_SERVICE_ROLE_KEY` comme **Secret** côté serveur Vercel. Aucun préfixe `VITE_` ne doit être ajouté à cette variable. `api/accounts.ts` vérifie la session Supabase et le rôle courant avant d’appeler l’API Auth ; la base revalide l’administrateur lors de l’attribution du rôle. Cette route est disponible avec `vercel dev` ou sur Vercel, pas avec le serveur Vite seul.
 
 Le détail de cette livraison et les limites connues figurent dans [docs/PHASE_1.md](docs/PHASE_1.md).
+
+La connexion utilise maintenant une double authentification TOTP, des sessions limitées et un cache local chiffré. Les identifiants du propriétaire se modifient dans **Paramètres → Mon compte**, réservé à l’administrateur. Lire [docs/SECURITE.md](docs/SECURITE.md) pour les protections, les réglages Supabase restant à effectuer et le plan de récupération.
