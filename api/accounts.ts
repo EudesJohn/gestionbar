@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createClient } from '@supabase/supabase-js';
 
 type Request = IncomingMessage & { body?: unknown };
-const roles = new Set(['admin', 'manager', 'entry']);
+const roles = new Set(['admin', 'manager']);
 
 async function readBody(req: Request): Promise<unknown> {
   if (req.body !== undefined) return typeof req.body === 'string' ? JSON.parse(req.body) : req.body;

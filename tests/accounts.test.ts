@@ -45,6 +45,7 @@ describe('administrator account endpoint', () => {
   it('validates the password and allowed roles before calling Supabase Auth', async () => {
     expect((await request({ ...fixtures, password: '1234' })).status).toBe(422);
     expect((await request({ ...fixtures, role: 'service_role' })).status).toBe(422);
+    expect((await request({ ...fixtures, role: 'entry' })).status).toBe(422);
     expect((await request({ ...fixtures, email: 'invalid' })).status).toBe(422);
     expect(createUser).not.toHaveBeenCalled();
   });

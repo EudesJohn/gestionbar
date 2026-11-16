@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'manager' | 'entry' | 'pending';
+export type Role = 'admin' | 'manager' | 'pending';
 export type Page = 'dashboard' | 'daily' | 'team' | 'products' | 'stock' | 'debts' | 'payroll' | 'reports' | 'settings';
 export type DebtKind = 'shortage' | 'credit' | 'advance' | 'other';
 export interface Profile { id: string; name: string; role: Role }

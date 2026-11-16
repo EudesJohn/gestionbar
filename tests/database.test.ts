@@ -21,6 +21,7 @@ beforeAll(async () => {
   await db.query("update public.profiles set role='admin' where id=$1", [admin]);
   await db.query("update public.profiles set role='manager' where id=$1", [manager]);
   await db.query("update public.profiles set role='entry' where id=$1", [entry]);
+  await db.exec(await readFile(new URL('../supabase/migrations/202611160003_remove_entry_role.sql', import.meta.url), 'utf8'));
   date = (await db.query<{ date: string }>("select to_char(public.local_day(),'YYYY-MM-DD') as date")).rows[0].date;
   await db.exec('set role authenticated'); await user(admin);
   await command('employee.create', { id: employee, name: 'Grâce Test', phone: '', sponsor: '', hiredOn: date, salary: 30000, color: '#dddddd', restDay: 0 });
@@ -38,11 +39,19 @@ describe.sequential('PostgreSQL transactions and authorization', () => {
     await expect(snapshot()).rejects.toThrow('attribution');
     await expect(command('employee.salary', { id: employee, salary: 1 })).rejects.toThrow('attribution');
   });
-  it('hides salary data and denies direct table access and role escalation', async () => {
-    await user(entry); const state = await snapshot();
-    expect(state.data.employees[0].salary).toBe(0); expect(state.data.products[0].cost).toBe(0); expect(state.data.payrolls).toEqual([]);
+  it('retires the old role without deleting its account and rejects attempts to reassign it', async () => {
+    await user(admin);
+    await expect(command('profile.role', { id: entry, role: 'entry' })).rejects.toThrow('profiles_role_check');
+    await db.exec('reset role');
+    const preserved = await db.query<{ id: string; role: string }>('select id,role from public.profiles where id=$1', [entry]);
+    expect(preserved.rows[0]).toEqual({ id: entry, role: 'pending' });
+    await db.exec('set role authenticated'); await user(entry);
+    await expect(snapshot()).rejects.toThrow('attribution');
+    await expect(command('sheet.create', {})).rejects.toThrow('attribution');
+    await user(manager); const state = await snapshot();
+    expect(state.data.employees[0].salary).toBe(30000);
     await expect(db.query('select * from public.employees')).rejects.toThrow();
-    await expect(command('profile.role', { id: entry, role: 'admin' })).rejects.toThrow();
+    await expect(command('profile.role', { id: manager, role: 'admin' })).rejects.toThrow();
     await expect(command('payroll.pay', { employeeId: employee, month: date.slice(0, 7), bonus: 0 })).rejects.toThrow();
   });
   it('uses the received value and restores a 30,000 salary when a 5,000 debt is settled', async () => {
@@ -62,7 +71,7 @@ describe.sequential('PostgreSQL transactions and authorization', () => {
     expect((await snapshot()).data.payrolls.find(p => p.employeeId === employeeId)?.net).toBe(30000);
   });
   it('calculates shortage using database prices, atomically records stock and debts, retries once', async () => {
-    await user(entry); const id = randomUUID(); const payload = { id: randomUUID(), date, employeeId: employee, lines: [{ productId: product, received: 100, sold: 100, price: 1, cost: 1 }], cash: 80000, momo: 15000, expense: 0, expenseNote: '', deposit: 0, credit: 0, client: '', note: '' };
+    await user(manager); const id = randomUUID(); const payload = { id: randomUUID(), date, employeeId: employee, lines: [{ productId: product, received: 100, sold: 100, price: 1, cost: 1 }], cash: 80000, momo: 15000, expense: 0, expenseNote: '', deposit: 0, credit: 0, client: '', note: '' };
     await command('sheet.create', payload, id); await command('sheet.create', payload, id);
     await user(admin); const state = await snapshot();
     expect(state.data.sheets.filter(s => s.employeeId === employee)).toHaveLength(1); expect(state.data.sheets.find(s => s.employeeId === employee)?.shortage).toBe(5000); expect(state.data.products.find(p => p.id === product)?.stock).toBe(100); expect(state.data.debts.find(d => d.employeeId === employee)?.balance).toBe(5000);
@@ -75,6 +84,14 @@ describe.sequential('PostgreSQL transactions and authorization', () => {
     await expect(command('employee.salary', { id: employee, salary: 0 })).rejects.toThrow();
     await expect(db.query('delete from public.audit_log')).rejects.toThrow();
     await user(admin); expect((await snapshot()).data.products.find(p => p.id === product)?.stock).toBe(100);
+  });
+  it('prevents editing or deleting a validated sheet even with a privileged table connection', async () => {
+    await db.exec('reset role');
+    try {
+      await expect(db.query('update public.daily_sheets set cash=cash+1 where employee_id=$1', [employee])).rejects.toThrow('annulation');
+      await expect(db.query('delete from public.daily_sheets where employee_id=$1', [employee])).rejects.toThrow('suppression');
+      await expect(db.query('delete from public.sale_lines')).rejects.toThrow('suppression');
+    } finally { await db.exec('set role authenticated'); await user(admin); }
   });
   it('repayment and payroll settle the same balance without a double deduction', async () => {
     await user(manager); const debt = (await snapshot()).data.debts.find(d => d.employeeId === employee)!;

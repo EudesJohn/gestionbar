@@ -20,9 +20,8 @@ export function payrollPreview(data: Data, employee: Employee, month: string, bo
   return { base: employee.salary, bonus, deductions, net: employee.salary + bonus - deductions, carry: outstanding - deductions, allocations };
 }
 export function allowed(profile: Profile, type: Command['type']) {
-  if (profile.role === 'pending') return false;
   if (profile.role === 'admin') return true;
-  if (profile.role === 'entry') return type === 'sheet.create';
+  if (profile.role !== 'manager') return false;
   return !['employee.salary', 'payroll.pay', 'settings.update', 'profile.role'].includes(type);
 }
 function ensure(test: unknown, message: string): asserts test { if (!test) throw new Error(message); }

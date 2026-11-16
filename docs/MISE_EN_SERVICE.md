@@ -4,7 +4,7 @@ Le site déployé utilise le projet Supabase `aypxutnxsboyqulzlsyz`. La configur
 
 ## 1. Initialiser la base
 
-Ouvrir [SQL Editor Supabase](https://supabase.com/dashboard/project/aypxutnxsboyqulzlsyz/sql/new). Sur un projet vierge, exécuter `202611160001_comptoir.sql`, puis [202611160002_phase1_rules.sql](../supabase/migrations/202611160002_phase1_rules.sql). Le projet actuel possède déjà la première migration : exécuter uniquement la seconde pour mettre à jour le calcul des nouvelles fiches. Les anciennes fiches restent inchangées.
+Ouvrir [SQL Editor Supabase](https://supabase.com/dashboard/project/aypxutnxsboyqulzlsyz/sql/new). Sur un projet vierge, exécuter les migrations `202611160001_comptoir.sql`, `202611160002_phase1_rules.sql` et [202611160003_remove_entry_role.sql](../supabase/migrations/202611160003_remove_entry_role.sql) dans cet ordre. Les deux premières sont déjà installées sur le projet actuel. La troisième retire le rôle historique `entry` de PostgreSQL. Elle conserve les comptes et leur historique ; un éventuel ancien compte de saisie passe en attente d’une attribution explicite par l’administrateur.
 
 La clé publique `anon` et la clé `service_role` ne sont pas des identifiants SQL. L’automatisation d’une migration nécessite une connexion PostgreSQL ou un accès à l’API de gestion Supabase.
 
@@ -34,7 +34,7 @@ Une ancienne clé JWT `service_role` a été partagée pendant la configuration.
 
 ## 5. Vérifier le service connecté
 
-- Connexion de l’administrateur, du gérant et de la saisie avec leurs droits respectifs.
+- Connexion de l’administrateur et du gérant avec leurs droits respectifs. Le gérant assure toute la saisie quotidienne.
 - Création d’une fiche et apparition des chiffres sur un second appareil.
 - Création d’une dette et remboursement partiel ; calcul cohérent du salaire.
 - Saisie hors connexion d’une fiche puis reconnexion ; validation serveur ou refus explicite si un conflit est détecté.

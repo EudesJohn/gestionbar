@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyCommand, payrollPreview, summary } from '../src/lib/domain';
+import { allowed, applyCommand, payrollPreview, summary } from '../src/lib/domain';
 import { emptyData } from '../src/lib/seed';
 import { shiftDate, today, uid } from '../src/lib/format';
 import type { Data, Profile, Sheet } from '../src/types';
@@ -13,6 +13,17 @@ function fixture(): Data {
 }
 function sheet(overrides: Partial<Sheet> = {}): Sheet { return { id: uid(), date: today(), employeeId: 'employee', lines: [{ productId: 'product', received: 100, sold: 100, price: 1, cost: 1 }], cash: 80000, momo: 15000, expense: 0, expenseNote: '', deposit: 0, credit: 0, client: '', note: '', shortage: 0, status: 'validated', createdAt: '', ...overrides }; }
 describe('financial invariants', () => {
+  it('gives managers daily operations and rejects obsolete or suspended roles', () => {
+    const manager: Profile = { ...admin, role: 'manager' };
+    for (const action of ['sheet.create','sheet.reverse','debt.create','debt.settle','stock.supply','stock.inventory','day.close','employee.create'] as const) {
+      expect(allowed(manager, action)).toBe(true);
+    }
+    for (const role of ['entry', 'pending', 'unknown']) {
+      expect(allowed({ ...admin, role } as Profile, 'sheet.create')).toBe(false);
+    }
+    expect(allowed(manager, 'employee.salary')).toBe(false);
+    expect(allowed(manager, 'profile.role')).toBe(false);
+  });
   it('calculates 5,000 FCFA shortage server-style and removes stock only once', () => {
     const data = applyCommand(fixture(), { type: 'sheet.create', payload: sheet() }, admin);
     expect(data.sheets[0].shortage).toBe(5000); expect(data.products[0].stock).toBe(100);

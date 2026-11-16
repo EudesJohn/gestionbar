@@ -20,7 +20,7 @@ const navigation = [
   { id: 'payroll', label: 'Salaires', icon: BookOpen },
   { id: 'reports', label: 'Rapports', icon: ChartNoAxesCombined },
 ] as const;
-const roles = { admin: 'Administrateur', manager: 'Gérant', entry: 'Saisie', pending: 'Accès en attente' };
+const roles = { admin: 'Administrateur', manager: 'Gérant', pending: 'Accès en attente' };
 export function App() {
   const store = useStore(); const { data, profile, demo, loading, error, online, pending } = store;
   const [page, setPage] = useState<Page>('dashboard'); const [date, setDate] = useState(today);
@@ -34,18 +34,18 @@ export function App() {
   useEffect(() => { const key = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setSearch(v => !v); } if (e.key === 'Escape') setSidebar(false); }; window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key); }, []);
   useEffect(() => {
     setModal(null); setNotifications(false); setSearch(false); setSidebar(false);
-    setPage(profile?.role === 'entry' ? 'daily' : 'dashboard');
+    setPage('dashboard');
   }, [profile?.id, profile?.role]);
   if (loading) return <div className="loading-screen"><span className="brand-icon"><Wine size={30} /></span><h1>Comptoir<span>.</span></h1><p>Votre bar prend place…</p><span className="loader" /></div>;
-  if (!profile) return <Login error={error} />;
+  if (!profile || !['admin', 'manager'].includes(profile.role)) return <Login error={error || 'Votre compte attend l’attribution d’un rôle par l’administrateur.'} />;
   const currentLabel = page === 'settings' ? 'Paramètres' : navigation.find(n => n.id === page)?.label;
   const lowStock = data.products.filter(p => p.stock <= p.threshold);
-  const visibleNavigation = navigation.filter(n => profile.role !== 'entry' || ['daily', 'products'].includes(n.id));
+  const visibleNavigation = navigation;
   return <div className="app-shell">
     <a className="skip-link" href="#main-content">Aller au contenu</a>
     {sidebar && <button className="sidebar-overlay" aria-label="Fermer le menu" onClick={() => setSidebar(false)} />}
     <aside className={`sidebar ${sidebar ? 'is-open' : ''}`}>
-      <button className="brand" onClick={() => navigate(profile.role === 'entry' ? 'daily' : 'dashboard')} aria-label="Comptoir, accueil"><span className="brand-icon"><Wine size={24} strokeWidth={1.8} /></span><span>comptoir<span className="brand-dot">.</span></span><span className="brand-caption">LA GESTION, AU CLAIR.</span></button>
+      <button className="brand" onClick={() => navigate('dashboard')} aria-label="Comptoir, accueil"><span className="brand-icon"><Wine size={24} strokeWidth={1.8} /></span><span>comptoir<span className="brand-dot">.</span></span><span className="brand-caption">LA GESTION, AU CLAIR.</span></button>
       <button className="bar-switcher" onClick={() => { if (profile.role === 'admin') navigate('settings'); else setHelp(true); }}><span className="bar-icon"><Store size={19} /></span><span><strong>{data.settings.barName}</strong><small>{data.settings.location}</small></span><ChevronDown size={15} /></button>
       <div className="nav-label">VOTRE ESPACE</div>
       <nav aria-label="Navigation principale">{visibleNavigation.map(({ id, label, icon: Icon }) => <button key={id} className={`nav-item ${page === id ? 'active' : ''}`} aria-current={page === id ? 'page' : undefined} onClick={() => navigate(id)}><Icon size={19} strokeWidth={1.7} /><span>{label}</span>{id === 'debts' && data.debts.some(d => d.balance > 0) && <span className="nav-count">{data.debts.filter(d => d.balance > 0).length}</span>}{page === id && <span className="nav-active-dot" />}</button>)}</nav>

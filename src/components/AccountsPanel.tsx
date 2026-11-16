@@ -33,26 +33,26 @@ export function AccountsPanel({ notify }: { notify: (message: string) => void })
             <td><div className="person-cell"><Avatar name={p.name} size="sm" /><strong>{p.name}{p.id === profile.id ? ' (vous)' : ''}</strong></div></td>
             <td><Badge tone={p.role === 'pending' ? 'orange' : 'green'} dot>{p.role === 'pending' ? 'Sans accès' : 'Actif'}</Badge></td>
             <td><Select aria-label={`Rôle de ${p.name}`} value={p.role} disabled={p.id === profile.id || busy} onChange={e => { setError(''); setRoleChange({ profile: p, role: e.target.value as Role }); }}>
-              <option value="pending">Sans accès / suspendu</option><option value="entry">Saisie</option><option value="manager">Gérant</option><option value="admin">Administrateur</option>
+               <option value="pending">Sans accès / suspendu</option><option value="manager">Gérant</option><option value="admin">Administrateur</option>
             </Select></td>
           </tr>)}
         </tbody></table></div>
         {!profiles.length && <Empty title="Aucun autre compte" text="Créez le premier accès de votre équipe." />}
         <div className="table-footer"><span><ShieldCheck size={15} />Les droits sont vérifiés à chaque validation.</span><Button variant="ghost" onClick={() => void sync()}>Actualiser</Button></div>
       </>}
-      <div className="table-scroll"><table><thead><tr><th>Action</th><th>Administrateur</th><th>Gérant</th><th>Saisie</th></tr></thead><tbody>
+      <div className="table-scroll"><table><thead><tr><th>Action</th><th>Administrateur</th><th>Gérant</th></tr></thead><tbody>
         {[
-          ['Fiches journalières', 'Oui', 'Oui', 'Oui'], ['Personnel, produits et stock', 'Oui', 'Oui', 'Lecture produits'],
-          ['Dettes et remboursements', 'Oui', 'Oui', 'Non'], ['Modification du salaire', 'Oui', 'Non', 'Non'],
-          ['Salaires', 'Paiement', 'Lecture', 'Non'], ['Annulation de fiche', 'Avec motif', 'Avec motif', 'Non'],
-          ['Créer les comptes et attribuer les rôles', 'Oui', 'Non', 'Non'],
+          ['Fiches journalières', 'Oui', 'Oui'], ['Personnel, produits et stock', 'Oui', 'Oui'],
+          ['Dettes et remboursements', 'Oui', 'Oui'], ['Modification du salaire', 'Oui', 'Non'],
+          ['Salaires', 'Paiement', 'Lecture'], ['Annulation de fiche', 'Avec motif', 'Avec motif'],
+          ['Créer les comptes et attribuer les rôles', 'Oui', 'Non'],
         ].map(row => <tr key={row[0]}>{row.map((value, i) => <td key={i}>{value}</td>)}</tr>)}
       </tbody></table></div>
     </section>
     {creating && <CreateAccount close={() => setCreating(false)} notify={notify} />}
     {roleChange && <Modal title="Modifier les droits" description={roleChange.profile.name} onClose={() => !busy && setRoleChange(null)}>
       <form onSubmit={e => { e.preventDefault(); void changeRole(); }}><div className="modal-body">
-        <p>{roleChange.role === 'admin' ? 'Cette personne aura accès aux salaires, aux paramètres et à la création des comptes.' : roleChange.role === 'pending' ? 'Cette personne ne pourra plus consulter les données ni valider de nouvelles opérations après la vérification de son accès.' : `Nouveau rôle : ${roleChange.role === 'manager' ? 'gérant' : 'saisie'}.`}</p>
+        <p>{roleChange.role === 'admin' ? 'Cette personne aura accès aux salaires, aux paramètres et à la création des comptes.' : roleChange.role === 'pending' ? 'Cette personne ne pourra plus consulter les données ni valider de nouvelles opérations après la vérification de son accès.' : 'Nouveau rôle : gérant, chargé de toute la gestion quotidienne.'}</p>
         <ErrorMessage error={error} />
       </div><FormFooter busy={busy} onClose={() => setRoleChange(null)} label="Confirmer les droits" /></form>
     </Modal>}
@@ -62,7 +62,7 @@ export function AccountsPanel({ notify }: { notify: (message: string) => void })
 function CreateAccount({ close, notify }: { close: () => void; notify: (message: string) => void }) {
   const { sync } = useStore();
   const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
-  const [role, setRole] = useState<Role>('entry'); const [visible, setVisible] = useState(false);
+  const [role, setRole] = useState<Role>('manager'); const [visible, setVisible] = useState(false);
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
 
   const submit = async () => {
@@ -91,7 +91,7 @@ function CreateAccount({ close, notify }: { close: () => void; notify: (message:
       <Field label="Adresse e-mail de connexion"><Input type="email" value={email} onChange={e => setEmail(e.target.value)} maxLength={254} required autoComplete="off" placeholder="gerant@votrebar.com" /></Field>
       <Field label="Mot de passe" hint="De 12 à 72 caractères. Communiquez les identifiants directement à cette personne."><Input type={visible ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} minLength={12} maxLength={72} required autoComplete="new-password" /></Field>
       <Button type="button" variant="ghost" icon={visible ? EyeOff : Eye} onClick={() => setVisible(v => !v)}>{visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}</Button>
-      <Field label="Rôle"><Select value={role} onChange={e => setRole(e.target.value as Role)}><option value="entry">Saisie — fiches journalières</option><option value="manager">Gérant — gestion quotidienne</option><option value="admin">Administrateur — accès complet</option></Select></Field>
+      <Field label="Rôle"><Select value={role} onChange={e => setRole(e.target.value as Role)}><option value="manager">Gérant — gestion quotidienne</option><option value="admin">Administrateur — accès complet</option></Select></Field>
       {role === 'admin' && <div className="info-box"><ShieldCheck size={18} /><p>Ce compte pourra créer d’autres utilisateurs et gérer les salaires.</p></div>}
       <ErrorMessage error={error} />
     </div><FormFooter busy={busy} onClose={close} label="Créer le compte" /></form>

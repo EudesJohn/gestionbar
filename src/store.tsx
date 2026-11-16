@@ -4,7 +4,7 @@ import Dexie from 'dexie';
 import type { Table } from 'dexie';
 import { supabase } from './lib/supabase';
 import { createDemoData, emptyData } from './lib/seed';
-import { applyCommand } from './lib/domain';
+import { allowed, applyCommand } from './lib/domain';
 import { uid } from './lib/format';
 import type { Command, Data, Profile, QueuedCommand } from './types';
 
@@ -45,6 +45,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       throw new Error(rpcError.message);
     }
     const snapshot = result as { data: Data; profile: Profile; profiles: Profile[] };
+    if (!['admin', 'manager'].includes(snapshot.profile.role)) {
+      const cleared = emptyData();
+      stateRef.current = { data: cleared, profile: null };
+      setData(cleared); setProfile(null); setProfiles([]); setPending([]);
+      await db.cache.delete(who);
+      throw new Error('Votre compte attend l’attribution d’un rôle par l’administrateur.');
+    }
     await db.cache.put({ key: who, ...snapshot });
     if (owner.current !== who) return;
     setData(snapshot.data); setProfile(snapshot.profile); setProfiles(snapshot.profiles);
@@ -80,7 +87,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           await db.cache.put({ key: 'demo', data: next, profile: demoProfile, profiles: [] });
         } else if (userId) {
           const cached = await db.cache.get(userId);
-          if (cached && !disposed && token === generation.current && owner.current === userId) { setData(cached.data); setProfile(cached.profile); setProfiles(cached.profiles); }
+          if (cached && ['admin', 'manager'].includes(cached.profile.role) && !disposed && token === generation.current && owner.current === userId) { setData(cached.data); setProfile(cached.profile); setProfiles(cached.profiles); }
           if (navigator.onLine) await fetchRemote();
           else if (!cached) throw new Error('Une première connexion à Internet est nécessaire.');
           await refreshQueue();
@@ -113,6 +120,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const execute = async (command: Command): Promise<'saved' | 'queued'> => {
     if (lock.current) throw new Error('Une opération est en cours. Veuillez patienter.');
     const current = stateRef.current; if (!current.profile) throw new Error('Connectez-vous pour continuer.');
+    if (!allowed(current.profile, command.type)) throw new Error('Votre rôle ne permet pas cette action.');
+    if (command.type === 'profile.role' && !['admin', 'manager', 'pending'].includes(command.payload.role)) throw new Error('Choisissez un rôle valide.');
     if (supabase && ['sheet.create', 'day.close'].includes(command.type) && current.data.calculationVersion !== 2) throw new Error('La mise à jour des règles de calcul est en attente. Installez la migration de phase 1 pour valider une fiche.');
     const next = command.type === 'profile.role' && supabase ? current.data : applyCommand(current.data, command, current.profile);
     lock.current = true; setBusy(true);

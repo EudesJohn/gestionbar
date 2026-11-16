@@ -10,7 +10,7 @@ Dépôt : https://github.com/EudesJohn/gestionbar
 - Catalogue et inventaire initial ; prix figés sur chaque fiche validée.
 - Fiche journalière unique par serveuse/date, cash, Momo, dépenses justifiées, crédits et manquants.
 - Dettes, avances, remboursements partiels ou totaux, salaires et reports des soldes non prélevés.
-- Comptes : l’administrateur crée les identifiants dans son espace, attribue un rôle et peut suspendre l’accès.
+- Comptes : seuls les rôles Administrateur et Gérant sont proposés. Le gérant assure toute la saisie quotidienne. L’administrateur crée les identifiants dans son espace et peut suspendre l’accès.
 - Contrôles PostgreSQL, RLS fermant les tables, RPC transactionnelles, journal d’audit et idempotence des commandes.
 - Saisie d’une fiche en attente hors connexion, puis validation serveur à la reconnexion. Les conflits restent visibles et ne sont pas écrasés silencieusement.
 

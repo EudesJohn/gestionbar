@@ -22,7 +22,7 @@ npm run test:e2e    # parcours desktop et mobile avec Playwright
 ## Activer Supabase
 
 1. Créez un projet Supabase.
-2. Exécutez les fichiers de `supabase/migrations` dans l’ordre : `202611160001_comptoir.sql`, puis `202611160002_phase1_rules.sql`. Sur une base où le premier script est déjà installé, exécutez uniquement le second.
+2. Exécutez les fichiers de `supabase/migrations` dans l’ordre : `202611160001_comptoir.sql`, `202611160002_phase1_rules.sql`, puis `202611160003_remove_entry_role.sql`. Sur une base existante, exécutez uniquement les migrations encore absentes.
 3. Créez le premier compte dans **Authentication → Users**.
 4. Donnez-lui le rôle `admin` dans `public.profiles` :
 
@@ -44,6 +44,7 @@ VITE_SUPABASE_ANON_KEY=votre-cle-publique
 ## Règles implémentées
 
 - Les montants sont des entiers FCFA.
+- Deux rôles actifs : Administrateur et Gérant. Le gérant assure toute la gestion quotidienne, y compris la saisie des fiches. `pending` représente un compte en attente ou suspendu.
 - Une seule fiche validée par serveuse et par date.
 - La remise de marchandise est rattachée à la serveuse et sort du stock une seule fois.
 - Le manquant est calculé sur la valeur de la marchandise prise, moins cash, Momo, dépenses justifiées et crédits clients. Le reste déclaré ne diminue pas automatiquement la dette.
